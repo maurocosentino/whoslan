@@ -262,33 +262,28 @@ func (m model) buildTable() string {
 	macs := make([]string, len(devices))
 	statuses := make([]string, len(devices))
 	durations := make([]string, len(devices))
-	unknownStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
 	rows := make([]table.Row, 0, len(devices))
 
 	for i, d := range devices {
-		name := displayName(d)
-		if isNewDevice(d) {
-			name = "⚠️ " + name
-		}
-		
-		if isUnknownVendor(d.Vendor) {
-		name = unknownStyle.Render(name)
-		}
+	name := displayName(d)
+	if isNewDevice(d) {
+		name = "⚠️ " + name
+	}
 
-		status := m.t.StatusOnline
-		duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
-		if !d.Online {
-			status = m.t.StatusOffline
-			duration = fmt.Sprintf(m.t.DisconnectedFor, formatSince(d.LastSeen))
-		}
-		names[i] = name
-		ips[i] = d.IP
-		macs[i] = d.MAC
-		statuses[i] = status
-		durations[i] = duration
+	status := m.t.StatusOnline
+	duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
+	if !d.Online {
+		status = m.t.StatusOffline
+		duration = fmt.Sprintf(m.t.DisconnectedFor, formatSince(d.LastSeen))
+	}
+	names[i] = name
+	ips[i] = d.IP
+	macs[i] = d.MAC
+	statuses[i] = status
+	durations[i] = duration
 
-		rows = append(rows, table.Row{name, d.IP, d.MAC, status, duration})
+	rows = append(rows, table.Row{name, d.IP, d.MAC, status, duration})
 	}
 
 	columns := []table.Column{
