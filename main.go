@@ -26,9 +26,10 @@ type scanResultMsg struct {
 }
 
 type model struct {
-	store  *store.Store
-	cursor int
-	err    error
+	store      *store.Store
+	cursor     int
+	err        error
+	showHistory bool
 }
 
 func main() {
@@ -81,7 +82,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.store.ApplyScan(msg.devices)
 		m.store.Save() // persistimos en cada escaneo
 		return m, tick()
-
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -91,10 +91,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.cursor--
 			}
 		case "down", "j":
-			online := onlineDevices(m.store)
-			if m.cursor < len(online)-1 {
+			if m.cursor < len(m.currentList())-1 {
 				m.cursor++
 			}
+		case "h":
+			m.showHistory = !m.showHistory
+			m.cursor = 0
 		}
 	}
 	return m, nil
@@ -110,6 +112,31 @@ func onlineDevices(s *store.Store) []*store.DeviceRecord {
 	}
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].IP < result[j].IP
+	})
+	return result
+}
+
+// currentList devuelve la lista a mostrar según la vista activa.
+func (m model) currentList() []*store.DeviceRecord {
+	if m.showHistory {
+		return recentDevices(m.store, 24*time.Hour)
+	}
+	return onlineDevices(m.store)
+}
+
+// recentDevices devuelve todos los dispositivos vistos dentro de la
+// ventana de tiempo indicada (online u offline), ordenados por LastSeen
+// descendente (los más recientes primero).
+func recentDevices(s *store.Store, window time.Duration) []*store.DeviceRecord {
+	cutoff := time.Now().Add(-window)
+	var result []*store.DeviceRecord
+	for _, d := range s.Devices {
+		if d.LastSeen.After(cutoff) {
+			result = append(result, d)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].LastSeen.After(result[j].LastSeen)
 	})
 	return result
 }
@@ -131,28 +158,43 @@ func (m model) View() string {
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	offlineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	b.WriteString(titleStyle.Render("whoslan — dispositivos en la red") + "\n\n")
+	title := "whoslan — dispositivos online"
+	if m.showHistory {
+		title = "whoslan — historial (últimas 24hs)"
+	}
+	b.WriteString(titleStyle.Render(title) + "\n\n")
 
 	if m.err != nil {
 		b.WriteString(fmt.Sprintf("Error escaneando: %v\n", m.err))
 	}
 
-	devices := onlineDevices(m.store)
 	now := time.Now()
+	devices := m.currentList()
 
 	for i, d := range devices {
-		connectedFor := formatDuration(now.Sub(d.FirstSeen))
-		line := fmt.Sprintf("%-16s %-18s %-30s conectado hace %s", d.IP, d.MAC, d.Vendor, connectedFor)
-		if i == m.cursor {
-			b.WriteString(selectedStyle.Render("> "+line) + "\n")
+		var status string
+		if d.Online {
+			status = fmt.Sprintf("conectado hace %s", formatDuration(now.Sub(d.FirstSeen)))
 		} else {
+			status = fmt.Sprintf("desconectado hace %s", formatDuration(now.Sub(d.LastSeen)))
+		}
+
+		line := fmt.Sprintf("%-16s %-18s %-30s %s", d.IP, d.MAC, d.Vendor, status)
+
+		switch {
+		case i == m.cursor:
+			b.WriteString(selectedStyle.Render("> "+line) + "\n")
+		case !d.Online:
+			b.WriteString(offlineStyle.Render("  "+line) + "\n")
+		default:
 			b.WriteString("  " + line + "\n")
 		}
 	}
 
-	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("(↑/↓ o j/k para moverte, q para salir · próximo escaneo automático cada %s)", scanInterval)) + "\n")
+	b.WriteString("\n" + dimStyle.Render("(↑/↓ para moverte · h para historial/online · q para salir)") + "\n")
 
 	return b.String()
 }
