@@ -208,10 +208,10 @@ func onlineDevices(s *store.Store) []*store.DeviceRecord {
 
 // formatSince devuelve "hace Xh Ym" si el momento fue dentro de las
 // últimas 24hs, o la fecha y hora exacta si fue antes.
-func formatSince(t time.Time) string {
+func formatSince(t time.Time, format string) string {
 	elapsed := time.Since(t)
 	if elapsed <= 24*time.Hour {
-		return "hace " + formatDuration(elapsed)
+		return fmt.Sprintf(format, formatDuration(elapsed))
 	}
 	return t.Format("02/01 15:04")
 }
@@ -306,7 +306,7 @@ func (m model) buildTable() string {
 		duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
 		if !d.Online {
 			status = m.t.StatusOffline
-			duration = fmt.Sprintf(m.t.DisconnectedFor, formatSince(d.LastSeen))
+			duration = formatSince(d.LastSeen, m.t.ConnectedFor)
 		}
 		names[i] = name
 		ips[i] = d.IP
