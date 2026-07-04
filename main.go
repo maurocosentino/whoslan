@@ -3,30 +3,24 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
-	"regexp"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"whoslan/internal/scanner"
 )
 
-type Device struct {
-	IP     string
-	MAC    string
-	Vendor string
-}
-
-// model representa el estado completo de la aplicación en un momento dado.
 type model struct {
-	devices  []Device
-	cursor   int // índice del dispositivo actualmente seleccionado
+	devices []scanner.Device
+	cursor  int
+	err     error
 }
 
 func main() {
-	devices := scanDevices()
+	devices, err := scanner.Scan("enp1s0")
 
-	m := model{devices: devices}
+	m := model{devices: devices, err: err}
 
 	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
@@ -35,39 +29,10 @@ func main() {
 	}
 }
 
-func scanDevices() []Device {
-	cmd := exec.Command("sudo", "arp-scan", "--interface=enp1s0", "--localnet")
-	output, _ := cmd.CombinedOutput()
-	return parseArpScan(string(output))
-}
-
-func parseArpScan(output string) []Device {
-	var devices []Device
-	lineRegex := regexp.MustCompile(`^(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F:]{17})\s+(.+)$`)
-
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		matches := lineRegex.FindStringSubmatch(line)
-		if matches == nil {
-			continue
-		}
-		devices = append(devices, Device{
-			IP:     matches[1],
-			MAC:    matches[2],
-			Vendor: strings.TrimSpace(matches[3]),
-		})
-	}
-	return devices
-}
-
-// Init se ejecuta una sola vez al arrancar el programa. No necesitamos
-// hacer nada acá porque el escaneo ya lo hicimos antes de lanzar la TUI.
 func (m model) Init() tea.Cmd {
 	return nil
 }
 
-// Update recibe cada evento (tecla presionada, etc.) y devuelve el
-// modelo actualizado. Es el corazón de la arquitectura Bubble Tea.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -87,14 +52,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View dibuja la pantalla completa a partir del estado actual del modelo.
 func (m model) View() string {
 	var b strings.Builder
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 
-	b.WriteString(titleStyle.Render("netwatch — dispositivos en la red") + "\n\n")
+	b.WriteString(titleStyle.Render("whoslan — dispositivos en la red") + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf("Error escaneando: %v\n", m.err))
+		return b.String()
+	}
 
 	for i, d := range m.devices {
 		line := fmt.Sprintf("%-16s %-18s %s", d.IP, d.MAC, d.Vendor)
