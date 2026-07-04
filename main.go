@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 
 	"whoslan/internal/scanner"
 	"whoslan/internal/store"
@@ -34,6 +35,8 @@ type model struct {
 	showHistory      bool
 	networkInterface string
 	scanInterval     time.Duration
+	renaming         bool
+	renameInput      textinput.Model
 }
 
 func main() {
@@ -81,6 +84,10 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.renaming {
+		return m.updateRenaming(msg)
+	}
+
 	switch msg := msg.(type) {
 	case scanResultMsg:
 		if msg.err != nil {
@@ -112,9 +119,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.store.Acknowledge(devices[m.cursor].MAC)
 				m.store.Save()
 			}
+		case "r":
+			devices := m.currentList()
+			if m.cursor < len(devices) {
+				ti := textinput.New()
+				ti.Placeholder = displayName(devices[m.cursor])
+				ti.SetValue(devices[m.cursor].Name)
+				ti.Focus()
+				ti.CharLimit = 30
+				m.renaming = true
+				m.renameInput = ti
+				return m, textinput.Blink
+			}
 		}
 	}
 	return m, nil
+}
+
+// updateRenaming maneja los eventos mientras el usuario está escribiendo
+// un nombre nuevo para el dispositivo seleccionado.
+func (m model) updateRenaming(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.renaming = false
+			return m, nil
+		case "enter":
+			devices := m.currentList()
+			if m.cursor < len(devices) {
+				m.store.SetName(devices[m.cursor].MAC, m.renameInput.Value())
+				m.store.Save()
+			}
+			m.renaming = false
+			return m, nil
+		}
+	}
+
+	var cmd tea.Cmd
+	m.renameInput, cmd = m.renameInput.Update(msg)
+	return m, cmd
 }
 
 // onlineDevices filtra y ordena (por IP) los dispositivos actualmente online.
@@ -246,9 +290,14 @@ func (m model) View() string {
 		b.WriteString(fmt.Sprintf("Error escaneando: %v\n", m.err))
 	}
 
-	b.WriteString(m.buildTable())
+	if m.renaming {
+		b.WriteString("Nuevo nombre: " + m.renameInput.View() + "\n")
+		b.WriteString("\n" + dimStyle.Render("(enter para confirmar · esc para cancelar)") + "\n")
+		return b.String()
+	}
 
-	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("(↑/↓ para moverte · h para historial/online · a para reconocer · q para salir · escaneo cada %s)", m.scanInterval)) + "\n")
+	b.WriteString(m.buildTable())
+	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("(↑/↓ para moverte · h para historial/online · a para reconocer · r para renombrar · q para salir · escaneo cada %s)", m.scanInterval)) + "\n")
 
 	return b.String()
 }

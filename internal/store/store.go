@@ -120,3 +120,10 @@ func (s *Store) Acknowledge(mac string) {
 		record.Acknowledged = true
 	}
 }
+
+// SetName asigna un nombre personalizado a un dispositivo por su MAC.
+func (s *Store) SetName(mac, name string) {
+	if record, exists := s.Devices[mac]; exists {
+		record.Name = name
+	}
+}
