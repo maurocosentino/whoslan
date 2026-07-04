@@ -110,16 +110,27 @@ func onlineDevices(s *store.Store) []*store.DeviceRecord {
 			result = append(result, d)
 		}
 	}
-	sort.Slice(result, func(i, j int) bool {
+	sort.SliceStable(result, func(i, j int) bool {
 		return result[i].IP < result[j].IP
 	})
 	return result
 }
 
+
+// formatSince devuelve "hace Xh Ym" si el momento fue dentro de las
+// últimas 24hs, o la fecha y hora exacta si fue antes.
+func formatSince(t time.Time) string {
+	elapsed := time.Since(t)
+	if elapsed <= 24*time.Hour {
+		return "hace " + formatDuration(elapsed)
+	}
+	return t.Format("02/01 15:04")
+}
+
 // currentList devuelve la lista a mostrar según la vista activa.
 func (m model) currentList() []*store.DeviceRecord {
 	if m.showHistory {
-		return recentDevices(m.store, 24*time.Hour)
+		return allDevices(m.store)
 	}
 	return onlineDevices(m.store)
 }
@@ -127,16 +138,18 @@ func (m model) currentList() []*store.DeviceRecord {
 // recentDevices devuelve todos los dispositivos vistos dentro de la
 // ventana de tiempo indicada (online u offline), ordenados por LastSeen
 // descendente (los más recientes primero).
-func recentDevices(s *store.Store, window time.Duration) []*store.DeviceRecord {
-	cutoff := time.Now().Add(-window)
+// allDevices devuelve todos los dispositivos alguna vez vistos,
+// ordenados por LastSeen descendente (los más recientes primero).
+func allDevices(s *store.Store) []*store.DeviceRecord {
 	var result []*store.DeviceRecord
 	for _, d := range s.Devices {
-		if d.LastSeen.After(cutoff) {
-			result = append(result, d)
-		}
+		result = append(result, d)
 	}
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].LastSeen.After(result[j].LastSeen)
+	sort.SliceStable(result, func(i, j int) bool {
+		if !result[i].LastSeen.Equal(result[j].LastSeen) {
+			return result[i].LastSeen.After(result[j].LastSeen)
+		}
+		return result[i].MAC < result[j].MAC // desempate determinístico
 	})
 	return result
 }
@@ -163,8 +176,8 @@ func (m model) View() string {
 
 	title := "whoslan — dispositivos online"
 	if m.showHistory {
-		title = "whoslan — historial (últimas 24hs)"
-	}
+		title = "whoslan — historial completo"
+	}	
 	b.WriteString(titleStyle.Render(title) + "\n\n")
 
 	if m.err != nil {
@@ -179,7 +192,7 @@ func (m model) View() string {
 		if d.Online {
 			status = fmt.Sprintf("conectado hace %s", formatDuration(now.Sub(d.FirstSeen)))
 		} else {
-			status = fmt.Sprintf("desconectado hace %s", formatDuration(now.Sub(d.LastSeen)))
+			status = "desconectado " + formatSince(d.LastSeen)
 		}
 
 		line := fmt.Sprintf("%-16s %-18s %-30s %s", d.IP, d.MAC, d.Vendor, status)
