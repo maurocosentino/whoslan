@@ -173,6 +173,7 @@ func (m model) View() string {
 	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 	offlineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	unknownStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
 	title := "whoslan — dispositivos online"
 	if m.showHistory {
@@ -200,6 +201,8 @@ func (m model) View() string {
 		switch {
 		case i == m.cursor:
 			b.WriteString(selectedStyle.Render("> "+line) + "\n")
+		case isUnknownVendor(d.Vendor):
+			b.WriteString(unknownStyle.Render("  "+line) + "\n")
 		case !d.Online:
 			b.WriteString(offlineStyle.Render("  "+line) + "\n")
 		default:
@@ -210,4 +213,10 @@ func (m model) View() string {
 	b.WriteString("\n" + dimStyle.Render("(↑/↓ para moverte · h para historial/online · q para salir)") + "\n")
 
 	return b.String()
+}
+
+// isUnknownVendor detecta MACs con randomización/administración local,
+// que arp-scan reporta con este texto característico.
+func isUnknownVendor(vendor string) bool {
+	return strings.Contains(vendor, "Unknown: locally administered")
 }
