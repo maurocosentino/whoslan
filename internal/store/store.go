@@ -15,6 +15,7 @@ type DeviceRecord struct {
 	IP           string    `json:"ip"`
 	MAC          string    `json:"mac"`
 	Vendor       string    `json:"vendor"`
+	Name         string    `json:"name"`
 	FirstSeen    time.Time `json:"first_seen"`
 	LastSeen     time.Time `json:"last_seen"`
 	Online       bool      `json:"online"`
@@ -117,5 +118,12 @@ func storePath() (string, error) {
 func (s *Store) Acknowledge(mac string) {
 	if record, exists := s.Devices[mac]; exists {
 		record.Acknowledged = true
+	}
+}
+
+// SetName asigna un nombre personalizado a un dispositivo por su MAC.
+func (s *Store) SetName(mac, name string) {
+	if record, exists := s.Devices[mac]; exists {
+		record.Name = name
 	}
 }

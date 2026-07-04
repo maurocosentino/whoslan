@@ -7,16 +7,17 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/bubbles/textinput"
 
 	"whoslan/internal/scanner"
 	"whoslan/internal/store"
+	"whoslan/internal/i18n"
 )
-
-// const scanInterval = 30 * time.Second
-// const networkInterface = "enp1s0"
 
 // scanResultMsg es el mensaje que Bubble Tea recibe cuando termina un
 // escaneo (disparado por tea.Tick). Encapsula tanto el resultado como
@@ -33,12 +34,44 @@ type model struct {
 	showHistory      bool
 	networkInterface string
 	scanInterval     time.Duration
+	renaming         bool
+	renameInput      textinput.Model
+	t                i18n.Strings
+}
+
+// ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
+// ANTES de lanzar la TUI. Esto evita que sudo intente pedir la contraseña
+// en background más tarde (durante un escaneo automático), lo cual
+// compite por stdin con Bubble Tea y rompe los atajos de teclado.
+func ensureSudo() error {
+	cmd := exec.Command("sudo", "-v")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// keepSudoAlive refresca el cache de sudo cada 4 minutos en background,
+// para que no expire en sesiones largas y vuelva a pedir contraseña
+// mientras la TUI ya está corriendo.
+func keepSudoAlive() {
+	for {
+		time.Sleep(4 * time.Minute)
+		exec.Command("sudo", "-v").Run() // no debería pedir contraseña si el cache sigue vigente
+	}
 }
 
 func main() {
 	iface := flag.String("interface", "enp1s0", "Interfaz de red a escanear (ej: enp1s0, wlan0)")
 	interval := flag.Duration("interval", 30*time.Second, "Intervalo entre escaneos (ej: 30s, 1m)")
+	lang := flag.String("lang", "es", "Idioma de la interfaz (es, en)")
 	flag.Parse()
+
+	if err := ensureSudo(); err != nil {
+		fmt.Println("Se necesita acceso sudo para escanear la red:", err)
+		os.Exit(1)
+	}
+	go keepSudoAlive()
 
 	s, err := store.Load()
 	if err != nil {
@@ -50,6 +83,7 @@ func main() {
 		store:            s,
 		networkInterface: *iface,
 		scanInterval:     *interval,
+		t:                i18n.Load(*lang),
 	}
 
 	p := tea.NewProgram(m)
@@ -80,6 +114,10 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.renaming {
+		return m.updateRenaming(msg)
+	}
+
 	switch msg := msg.(type) {
 	case scanResultMsg:
 		if msg.err != nil {
@@ -111,9 +149,46 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.store.Acknowledge(devices[m.cursor].MAC)
 				m.store.Save()
 			}
+		case "r":
+			devices := m.currentList()
+			if m.cursor < len(devices) {
+				ti := textinput.New()
+				ti.Placeholder = displayName(devices[m.cursor])
+				ti.SetValue(devices[m.cursor].Name)
+				ti.Focus()
+				ti.CharLimit = 30
+				m.renaming = true
+				m.renameInput = ti
+				return m, textinput.Blink
+			}
 		}
 	}
 	return m, nil
+}
+
+// updateRenaming maneja los eventos mientras el usuario está escribiendo
+// un nombre nuevo para el dispositivo seleccionado.
+func (m model) updateRenaming(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "esc":
+			m.renaming = false
+			return m, nil
+		case "enter":
+			devices := m.currentList()
+			if m.cursor < len(devices) {
+				m.store.SetName(devices[m.cursor].MAC, m.renameInput.Value())
+				m.store.Save()
+			}
+			m.renaming = false
+			return m, nil
+		}
+	}
+
+	var cmd tea.Cmd
+	m.renameInput, cmd = m.renameInput.Update(msg)
+	return m, cmd
 }
 
 // onlineDevices filtra y ordena (por IP) los dispositivos actualmente online.
@@ -133,10 +208,10 @@ func onlineDevices(s *store.Store) []*store.DeviceRecord {
 
 // formatSince devuelve "hace Xh Ym" si el momento fue dentro de las
 // últimas 24hs, o la fecha y hora exacta si fue antes.
-func formatSince(t time.Time) string {
+func formatSince(t time.Time, format string) string {
 	elapsed := time.Since(t)
 	if elapsed <= 24*time.Hour {
-		return "hace " + formatDuration(elapsed)
+		return fmt.Sprintf(format, formatDuration(elapsed))
 	}
 	return t.Format("02/01 15:04")
 }
@@ -147,6 +222,15 @@ func (m model) currentList() []*store.DeviceRecord {
 		return allDevices(m.store)
 	}
 	return onlineDevices(m.store)
+}
+
+// displayName devuelve el nombre asignado al dispositivo, o el vendor
+// como fallback si todavía no tiene nombre.
+func displayName(d *store.DeviceRecord) string {
+	if d.Name != "" {
+		return d.Name
+	}
+	return d.Vendor
 }
 
 // recentDevices devuelve todos los dispositivos vistos dentro de la
@@ -180,64 +264,104 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", m)
 }
 
+// columnWidth calcula el ancho necesario para una columna, en base al
+// título y al contenido más largo, respetando un mínimo y un máximo.
+func columnWidth(title string, values []string, min, max int) int {
+	width := len(title)
+	for _, v := range values {
+		if len(v) > width {
+			width = len(v)
+		}
+	}
+	if width < min {
+		width = min
+	}
+	if width > max {
+		width = max
+	}
+	return width
+}
+
+func (m model) buildTable() string {
+	now := time.Now()
+	devices := m.currentList()
+
+	names := make([]string, len(devices))
+	ips := make([]string, len(devices))
+	macs := make([]string, len(devices))
+	statuses := make([]string, len(devices))
+	durations := make([]string, len(devices))
+
+	rows := make([]table.Row, 0, len(devices))
+
+	for i, d := range devices {
+		name := displayName(d)
+
+		alert := " "
+		if isNewDevice(d) {
+			alert = "!"
+		}
+
+		status := m.t.StatusOnline
+		duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
+		if !d.Online {
+			status = m.t.StatusOffline
+			duration = formatSince(d.LastSeen, m.t.ConnectedFor)
+		}
+		names[i] = name
+		ips[i] = d.IP
+		macs[i] = d.MAC
+		statuses[i] = status
+		durations[i] = duration
+
+		rows = append(rows, table.Row{alert, name, d.IP, d.MAC, status, duration})
+	}
+
+	columns := []table.Column{
+		{Title: m.t.ColAlert, Width: 1},
+		{Title: m.t.ColName, Width: columnWidth(m.t.ColName, names, 10, 40)},
+		{Title: m.t.ColIP, Width: columnWidth(m.t.ColIP, ips, 10, 15)},
+		{Title: m.t.ColMAC, Width: columnWidth(m.t.ColMAC, macs, 10, 17)},
+		{Title: m.t.ColStatus, Width: columnWidth(m.t.ColStatus, statuses, 6, 10)},
+		{Title: m.t.ColDuration, Width: columnWidth(m.t.ColDuration, durations, 8, 20)},
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.cursor)
+
+	return t.View()
+}
+
 func (m model) View() string {
 	var b strings.Builder
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	offlineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	unknownStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
-	title := "whoslan — dispositivos online"
+	title := m.t.TitleOnline
 	if m.showHistory {
-		title = "whoslan — historial completo"
-	}	
+		title = m.t.TitleHistory
+	}
 	b.WriteString(titleStyle.Render(title) + "\n\n")
 
 	if m.err != nil {
-		b.WriteString(fmt.Sprintf("Error escaneando: %v\n", m.err))
+		b.WriteString(fmt.Sprintf(m.t.ScanError, m.err))
 	}
 
-	now := time.Now()
-	devices := m.currentList()
-
-	for i, d := range devices {
-	var status string
-	if d.Online {
-		status = fmt.Sprintf("conectado hace %s", formatDuration(now.Sub(d.FirstSeen)))
-	} else {
-		status = "desconectado " + formatSince(d.LastSeen)
+	if m.renaming {
+		b.WriteString(m.t.RenamePrompt + m.renameInput.View() + "\n")
+		b.WriteString("\n" + dimStyle.Render(m.t.RenameHelp) + "\n")
+		return b.String()
 	}
 
-	icon := "  "
-	if isNewDevice(d) {
-		icon = "⚠️ "
-	}
+	b.WriteString(m.buildTable())
+	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf(m.t.HelpBar, m.scanInterval)) + "\n")
 
-	content := fmt.Sprintf("%-16s %-18s %-30s %s", d.IP, d.MAC, d.Vendor, status)
-
-	cursorMark := "  "
-	if i == m.cursor {
-		cursorMark = "> "
-	}
-
-	line := cursorMark + icon + content
-
-	switch {
-	case i == m.cursor:
-		b.WriteString(selectedStyle.Render(line) + "\n")
-	case isUnknownVendor(d.Vendor):
-		b.WriteString(unknownStyle.Render(line) + "\n")
-	case !d.Online:
-		b.WriteString(offlineStyle.Render(line) + "\n")
-	default:
-		b.WriteString(line + "\n")
-	}
-}
-
-	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("(↑/↓ para moverte · h para historial/online · a para reconocer · q para salir · escaneo cada %s)", m.scanInterval)) + "\n")
-	
 	return b.String()
 }
 
