@@ -9,6 +9,7 @@ type Strings struct {
 	ColMAC          string
 	ColStatus       string
 	ColDuration     string
+	ColAlert 		string
 	StatusOnline    string
 	StatusOffline   string
 	ConnectedFor    string
@@ -27,6 +28,7 @@ var es = Strings{
 	ColMAC:          "MAC",
 	ColStatus:       "Estado",
 	ColDuration:     "Duración",
+	ColAlert: 		 "",
 	StatusOnline:    "Online",
 	StatusOffline:   "Offline",
 	ConnectedFor:    "hace %s",
@@ -45,6 +47,7 @@ var en = Strings{
 	ColMAC:          "MAC",
 	ColStatus:       "Status",
 	ColDuration:     "Duration",
+	ColAlert: 		 "",
 	StatusOnline:    "Online",
 	StatusOffline:   "Offline",
 	ConnectedFor:    "%s ago",

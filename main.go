@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"os/exec"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -38,11 +39,39 @@ type model struct {
 	t                i18n.Strings
 }
 
+// ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
+// ANTES de lanzar la TUI. Esto evita que sudo intente pedir la contraseña
+// en background más tarde (durante un escaneo automático), lo cual
+// compite por stdin con Bubble Tea y rompe los atajos de teclado.
+func ensureSudo() error {
+	cmd := exec.Command("sudo", "-v")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// keepSudoAlive refresca el cache de sudo cada 4 minutos en background,
+// para que no expire en sesiones largas y vuelva a pedir contraseña
+// mientras la TUI ya está corriendo.
+func keepSudoAlive() {
+	for {
+		time.Sleep(4 * time.Minute)
+		exec.Command("sudo", "-v").Run() // no debería pedir contraseña si el cache sigue vigente
+	}
+}
+
 func main() {
 	iface := flag.String("interface", "enp1s0", "Interfaz de red a escanear (ej: enp1s0, wlan0)")
 	interval := flag.Duration("interval", 30*time.Second, "Intervalo entre escaneos (ej: 30s, 1m)")
 	lang := flag.String("lang", "es", "Idioma de la interfaz (es, en)")
 	flag.Parse()
+
+	if err := ensureSudo(); err != nil {
+		fmt.Println("Se necesita acceso sudo para escanear la red:", err)
+		os.Exit(1)
+	}
+	go keepSudoAlive()
 
 	s, err := store.Load()
 	if err != nil {
@@ -266,27 +295,30 @@ func (m model) buildTable() string {
 	rows := make([]table.Row, 0, len(devices))
 
 	for i, d := range devices {
-	name := displayName(d)
-	if isNewDevice(d) {
-		name = "⚠️ " + name
-	}
+		name := displayName(d)
 
-	status := m.t.StatusOnline
-	duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
-	if !d.Online {
-		status = m.t.StatusOffline
-		duration = fmt.Sprintf(m.t.DisconnectedFor, formatSince(d.LastSeen))
-	}
-	names[i] = name
-	ips[i] = d.IP
-	macs[i] = d.MAC
-	statuses[i] = status
-	durations[i] = duration
+		alert := " "
+		if isNewDevice(d) {
+			alert = "!"
+		}
 
-	rows = append(rows, table.Row{name, d.IP, d.MAC, status, duration})
+		status := m.t.StatusOnline
+		duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
+		if !d.Online {
+			status = m.t.StatusOffline
+			duration = fmt.Sprintf(m.t.DisconnectedFor, formatSince(d.LastSeen))
+		}
+		names[i] = name
+		ips[i] = d.IP
+		macs[i] = d.MAC
+		statuses[i] = status
+		durations[i] = duration
+
+		rows = append(rows, table.Row{alert, name, d.IP, d.MAC, status, duration})
 	}
 
 	columns := []table.Column{
+		{Title: m.t.ColAlert, Width: 1},
 		{Title: m.t.ColName, Width: columnWidth(m.t.ColName, names, 10, 40)},
 		{Title: m.t.ColIP, Width: columnWidth(m.t.ColIP, ips, 10, 15)},
 		{Title: m.t.ColMAC, Width: columnWidth(m.t.ColMAC, macs, 10, 17)},
