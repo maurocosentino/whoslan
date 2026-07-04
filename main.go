@@ -234,20 +234,37 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", m)
 }
 
-func (m model) buildTable() string {
-	columns := []table.Column{
-		{Title: "Nombre", Width: 22},
-		{Title: "IP", Width: 15},
-		{Title: "MAC", Width: 17},
-		{Title: "Estado", Width: 10},
-		{Title: "Duración", Width: 18},
+// columnWidth calcula el ancho necesario para una columna, en base al
+// título y al contenido más largo, respetando un mínimo y un máximo.
+func columnWidth(title string, values []string, min, max int) int {
+	width := len(title)
+	for _, v := range values {
+		if len(v) > width {
+			width = len(v)
+		}
 	}
+	if width < min {
+		width = min
+	}
+	if width > max {
+		width = max
+	}
+	return width
+}
 
+func (m model) buildTable() string {
 	now := time.Now()
 	devices := m.currentList()
+
+	names := make([]string, len(devices))
+	ips := make([]string, len(devices))
+	macs := make([]string, len(devices))
+	statuses := make([]string, len(devices))
+	durations := make([]string, len(devices))
+
 	rows := make([]table.Row, 0, len(devices))
 
-	for _, d := range devices {
+	for i, d := range devices {
 		name := displayName(d)
 		if isNewDevice(d) {
 			name = "⚠️ " + name
@@ -260,7 +277,21 @@ func (m model) buildTable() string {
 			duration = formatSince(d.LastSeen)
 		}
 
+		names[i] = name
+		ips[i] = d.IP
+		macs[i] = d.MAC
+		statuses[i] = status
+		durations[i] = duration
+
 		rows = append(rows, table.Row{name, d.IP, d.MAC, status, duration})
+	}
+
+	columns := []table.Column{
+		{Title: "Nombre", Width: columnWidth("Nombre", names, 10, 40)},
+		{Title: "IP", Width: columnWidth("IP", ips, 10, 15)},
+		{Title: "MAC", Width: columnWidth("MAC", macs, 10, 17)},
+		{Title: "Estado", Width: columnWidth("Estado", statuses, 6, 10)},
+		{Title: "Duración", Width: columnWidth("Duración", durations, 8, 20)},
 	}
 
 	t := table.New(
