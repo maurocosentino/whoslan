@@ -12,12 +12,13 @@ import (
 // DeviceRecord es el estado histórico de un dispositivo: cuándo se lo
 // vio por primera y última vez, y si está online en este momento.
 type DeviceRecord struct {
-	IP        string    `json:"ip"`
-	MAC       string    `json:"mac"`
-	Vendor    string    `json:"vendor"`
-	FirstSeen time.Time `json:"first_seen"`
-	LastSeen  time.Time `json:"last_seen"`
-	Online    bool      `json:"online"`
+	IP           string    `json:"ip"`
+	MAC          string    `json:"mac"`
+	Vendor       string    `json:"vendor"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	Online       bool      `json:"online"`
+	Acknowledged bool      `json:"acknowledged"`
 }
 
 // Store mantiene el historial de dispositivos, indexado por MAC
@@ -109,4 +110,12 @@ func storePath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dir, "history.json"), nil
+}
+
+// Acknowledge marca un dispositivo como reconocido, sacándole la alerta
+// de "nuevo" para siempre (hasta que se le haga reset manual, si hiciera falta).
+func (s *Store) Acknowledge(mac string) {
+	if record, exists := s.Devices[mac]; exists {
+		record.Acknowledged = true
+	}
 }

@@ -97,6 +97,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "h":
 			m.showHistory = !m.showHistory
 			m.cursor = 0
+		case "a":
+			devices := m.currentList()
+			if m.cursor < len(devices) {
+				m.store.Acknowledge(devices[m.cursor].MAC)
+				m.store.Save()
+			}
 		}
 	}
 	return m, nil
@@ -189,28 +195,40 @@ func (m model) View() string {
 	devices := m.currentList()
 
 	for i, d := range devices {
-		var status string
-		if d.Online {
-			status = fmt.Sprintf("conectado hace %s", formatDuration(now.Sub(d.FirstSeen)))
-		} else {
-			status = "desconectado " + formatSince(d.LastSeen)
-		}
-
-		line := fmt.Sprintf("%-16s %-18s %-30s %s", d.IP, d.MAC, d.Vendor, status)
-
-		switch {
-		case i == m.cursor:
-			b.WriteString(selectedStyle.Render("> "+line) + "\n")
-		case isUnknownVendor(d.Vendor):
-			b.WriteString(unknownStyle.Render("  "+line) + "\n")
-		case !d.Online:
-			b.WriteString(offlineStyle.Render("  "+line) + "\n")
-		default:
-			b.WriteString("  " + line + "\n")
-		}
+	var status string
+	if d.Online {
+		status = fmt.Sprintf("conectado hace %s", formatDuration(now.Sub(d.FirstSeen)))
+	} else {
+		status = "desconectado " + formatSince(d.LastSeen)
 	}
 
-	b.WriteString("\n" + dimStyle.Render("(↑/↓ para moverte · h para historial/online · q para salir)") + "\n")
+	icon := "  "
+	if isNewDevice(d) {
+		icon = "⚠️ "
+	}
+
+	content := fmt.Sprintf("%-16s %-18s %-30s %s", d.IP, d.MAC, d.Vendor, status)
+
+	cursorMark := "  "
+	if i == m.cursor {
+		cursorMark = "> "
+	}
+
+	line := cursorMark + icon + content
+
+	switch {
+	case i == m.cursor:
+		b.WriteString(selectedStyle.Render(line) + "\n")
+	case isUnknownVendor(d.Vendor):
+		b.WriteString(unknownStyle.Render(line) + "\n")
+	case !d.Online:
+		b.WriteString(offlineStyle.Render(line) + "\n")
+	default:
+		b.WriteString(line + "\n")
+	}
+}
+
+	b.WriteString("\n" + dimStyle.Render("(↑/↓ para moverte · h para historial/online · a para reconocer · q para salir)") + "\n")
 
 	return b.String()
 }
@@ -219,4 +237,10 @@ func (m model) View() string {
 // que arp-scan reporta con este texto característico.
 func isUnknownVendor(vendor string) bool {
 	return strings.Contains(vendor, "Unknown: locally administered")
+}
+
+// isNewDevice indica si un dispositivo todavía no fue reconocido
+// manualmente por el usuario (tecla "a").
+func isNewDevice(d *store.DeviceRecord) bool {
+	return !d.Acknowledged
 }
