@@ -15,10 +15,8 @@ import (
 
 	"whoslan/internal/scanner"
 	"whoslan/internal/store"
+	"whoslan/internal/i18n"
 )
-
-// const scanInterval = 30 * time.Second
-// const networkInterface = "enp1s0"
 
 // scanResultMsg es el mensaje que Bubble Tea recibe cuando termina un
 // escaneo (disparado por tea.Tick). Encapsula tanto el resultado como
@@ -37,11 +35,13 @@ type model struct {
 	scanInterval     time.Duration
 	renaming         bool
 	renameInput      textinput.Model
+	t                i18n.Strings
 }
 
 func main() {
 	iface := flag.String("interface", "enp1s0", "Interfaz de red a escanear (ej: enp1s0, wlan0)")
 	interval := flag.Duration("interval", 30*time.Second, "Intervalo entre escaneos (ej: 30s, 1m)")
+	lang := flag.String("lang", "es", "Idioma de la interfaz (es, en)")
 	flag.Parse()
 
 	s, err := store.Load()
@@ -54,6 +54,7 @@ func main() {
 		store:            s,
 		networkInterface: *iface,
 		scanInterval:     *interval,
+		t:                i18n.Load(*lang),
 	}
 
 	p := tea.NewProgram(m)
@@ -261,6 +262,7 @@ func (m model) buildTable() string {
 	macs := make([]string, len(devices))
 	statuses := make([]string, len(devices))
 	durations := make([]string, len(devices))
+	unknownStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
 	rows := make([]table.Row, 0, len(devices))
 
@@ -269,14 +271,17 @@ func (m model) buildTable() string {
 		if isNewDevice(d) {
 			name = "⚠️ " + name
 		}
-
-		status := "Online"
-		duration := "hace " + formatDuration(now.Sub(d.FirstSeen))
-		if !d.Online {
-			status = "Offline"
-			duration = formatSince(d.LastSeen)
+		
+		if isUnknownVendor(d.Vendor) {
+		name = unknownStyle.Render(name)
 		}
 
+		status := m.t.StatusOnline
+		duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
+		if !d.Online {
+			status = m.t.StatusOffline
+			duration = fmt.Sprintf(m.t.DisconnectedFor, formatSince(d.LastSeen))
+		}
 		names[i] = name
 		ips[i] = d.IP
 		macs[i] = d.MAC
@@ -287,11 +292,11 @@ func (m model) buildTable() string {
 	}
 
 	columns := []table.Column{
-		{Title: "Nombre", Width: columnWidth("Nombre", names, 10, 40)},
-		{Title: "IP", Width: columnWidth("IP", ips, 10, 15)},
-		{Title: "MAC", Width: columnWidth("MAC", macs, 10, 17)},
-		{Title: "Estado", Width: columnWidth("Estado", statuses, 6, 10)},
-		{Title: "Duración", Width: columnWidth("Duración", durations, 8, 20)},
+		{Title: m.t.ColName, Width: columnWidth(m.t.ColName, names, 10, 40)},
+		{Title: m.t.ColIP, Width: columnWidth(m.t.ColIP, ips, 10, 15)},
+		{Title: m.t.ColMAC, Width: columnWidth(m.t.ColMAC, macs, 10, 17)},
+		{Title: m.t.ColStatus, Width: columnWidth(m.t.ColStatus, statuses, 6, 10)},
+		{Title: m.t.ColDuration, Width: columnWidth(m.t.ColDuration, durations, 8, 20)},
 	}
 
 	t := table.New(
@@ -311,24 +316,24 @@ func (m model) View() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	title := "whoslan — dispositivos online"
+	title := m.t.TitleOnline
 	if m.showHistory {
-		title = "whoslan — historial completo"
+		title = m.t.TitleHistory
 	}
 	b.WriteString(titleStyle.Render(title) + "\n\n")
 
 	if m.err != nil {
-		b.WriteString(fmt.Sprintf("Error escaneando: %v\n", m.err))
+		b.WriteString(fmt.Sprintf(m.t.ScanError, m.err))
 	}
 
 	if m.renaming {
-		b.WriteString("Nuevo nombre: " + m.renameInput.View() + "\n")
-		b.WriteString("\n" + dimStyle.Render("(enter para confirmar · esc para cancelar)") + "\n")
+		b.WriteString(m.t.RenamePrompt + m.renameInput.View() + "\n")
+		b.WriteString("\n" + dimStyle.Render(m.t.RenameHelp) + "\n")
 		return b.String()
 	}
 
 	b.WriteString(m.buildTable())
-	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("(↑/↓ para moverte · h para historial/online · a para reconocer · r para renombrar · q para salir · escaneo cada %s)", m.scanInterval)) + "\n")
+	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf(m.t.HelpBar, m.scanInterval)) + "\n")
 
 	return b.String()
 }
