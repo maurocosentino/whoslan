@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/bubbles/table"
 
 	"whoslan/internal/scanner"
 	"whoslan/internal/store"
@@ -149,6 +150,15 @@ func (m model) currentList() []*store.DeviceRecord {
 	return onlineDevices(m.store)
 }
 
+// displayName devuelve el nombre asignado al dispositivo, o el vendor
+// como fallback si todavía no tiene nombre.
+func displayName(d *store.DeviceRecord) string {
+	if d.Name != "" {
+		return d.Name
+	}
+	return d.Vendor
+}
+
 // recentDevices devuelve todos los dispositivos vistos dentro de la
 // ventana de tiempo indicada (online u offline), ordenados por LastSeen
 // descendente (los más recientes primero).
@@ -180,64 +190,66 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dm", m)
 }
 
+func (m model) buildTable() string {
+	columns := []table.Column{
+		{Title: "Nombre", Width: 22},
+		{Title: "IP", Width: 15},
+		{Title: "MAC", Width: 17},
+		{Title: "Estado", Width: 10},
+		{Title: "Duración", Width: 18},
+	}
+
+	now := time.Now()
+	devices := m.currentList()
+	rows := make([]table.Row, 0, len(devices))
+
+	for _, d := range devices {
+		name := displayName(d)
+		if isNewDevice(d) {
+			name = "⚠️ " + name
+		}
+
+		status := "Online"
+		duration := "hace " + formatDuration(now.Sub(d.FirstSeen))
+		if !d.Online {
+			status = "Offline"
+			duration = formatSince(d.LastSeen)
+		}
+
+		rows = append(rows, table.Row{name, d.IP, d.MAC, status, duration})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.cursor)
+
+	return t.View()
+}
+
 func (m model) View() string {
 	var b strings.Builder
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	offlineStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	unknownStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 
 	title := "whoslan — dispositivos online"
 	if m.showHistory {
 		title = "whoslan — historial completo"
-	}	
+	}
 	b.WriteString(titleStyle.Render(title) + "\n\n")
 
 	if m.err != nil {
 		b.WriteString(fmt.Sprintf("Error escaneando: %v\n", m.err))
 	}
 
-	now := time.Now()
-	devices := m.currentList()
-
-	for i, d := range devices {
-	var status string
-	if d.Online {
-		status = fmt.Sprintf("conectado hace %s", formatDuration(now.Sub(d.FirstSeen)))
-	} else {
-		status = "desconectado " + formatSince(d.LastSeen)
-	}
-
-	icon := "  "
-	if isNewDevice(d) {
-		icon = "⚠️ "
-	}
-
-	content := fmt.Sprintf("%-16s %-18s %-30s %s", d.IP, d.MAC, d.Vendor, status)
-
-	cursorMark := "  "
-	if i == m.cursor {
-		cursorMark = "> "
-	}
-
-	line := cursorMark + icon + content
-
-	switch {
-	case i == m.cursor:
-		b.WriteString(selectedStyle.Render(line) + "\n")
-	case isUnknownVendor(d.Vendor):
-		b.WriteString(unknownStyle.Render(line) + "\n")
-	case !d.Online:
-		b.WriteString(offlineStyle.Render(line) + "\n")
-	default:
-		b.WriteString(line + "\n")
-	}
-}
+	b.WriteString(m.buildTable())
 
 	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf("(↑/↓ para moverte · h para historial/online · a para reconocer · q para salir · escaneo cada %s)", m.scanInterval)) + "\n")
-	
+
 	return b.String()
 }
 

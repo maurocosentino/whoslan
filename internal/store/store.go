@@ -15,6 +15,7 @@ type DeviceRecord struct {
 	IP           string    `json:"ip"`
 	MAC          string    `json:"mac"`
 	Vendor       string    `json:"vendor"`
+	Name         string    `json:"name"`
 	FirstSeen    time.Time `json:"first_seen"`
 	LastSeen     time.Time `json:"last_seen"`
 	Online       bool      `json:"online"`
