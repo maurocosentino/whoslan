@@ -32,7 +32,6 @@ type model struct {
 	cursor           int
 	err              error
 	networkInterface string
-	scanInterval     time.Duration
 	renaming         bool
 	renameInput      textinput.Model
 	t                i18n.Strings
@@ -62,7 +61,6 @@ func keepSudoAlive() {
 
 func main() {
 	iface := flag.String("interface", "enp1s0", "Interfaz de red a escanear (ej: enp1s0, wlan0)")
-	interval := flag.Duration("interval", 30*time.Second, "Intervalo entre escaneos (ej: 30s, 1m)")
 	lang := flag.String("lang", "es", "Idioma de la interfaz (es, en)")
 	flag.Parse()
 
@@ -81,7 +79,6 @@ func main() {
 	m := model{
 		store:            s,
 		networkInterface: *iface,
-		scanInterval:     *interval,
 		t:                i18n.Load(*lang),
 	}
 
@@ -102,14 +99,8 @@ func (m model) doScan() tea.Cmd {
 	}
 }
 
-func (m model) tick() tea.Cmd {
-	return tea.Tick(m.scanInterval, func(t time.Time) tea.Msg {
-		return m.doScan()()
-	})
-}
-
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.doScan(), m.tick())
+	return m.doScan()
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -119,14 +110,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case scanResultMsg:
-		if msg.err != nil {
-			m.err = msg.err
-			return m, m.tick()
-		}
-		m.err = nil
-		m.store.ApplyScan(msg.devices)
-		m.store.Save()
-		return m, m.tick()
+	if msg.err != nil {
+		m.err = msg.err
+		return m, nil
+	}
+	m.err = nil
+	m.store.ApplyScan(msg.devices)
+	m.store.Save()
+	return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -157,6 +148,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renameInput = ti
 				return m, textinput.Blink
 			}
+		case "s":
+			return m, m.doScan()	
 		}
 	}
 	return m, nil
@@ -342,8 +335,10 @@ func (m model) View() string {
 		return b.String()
 	}
 
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
 	b.WriteString(m.buildTable())
-	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf(m.t.HelpBar, m.scanInterval)) + "\n")
+	b.WriteString("\n" + buildHelpBar(m.t.HelpItems, dimStyle, keyStyle) + "\n")
 
 	return b.String()
 }
@@ -379,4 +374,14 @@ func dimOfflineRows(rendered string, devices []*store.DeviceRecord, cursor int) 
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+// buildHelpBar arma la barra de ayuda, resaltando en negrita solo la
+// tecla de cada atajo (no la descripción completa).
+func buildHelpBar(items []i18n.HelpItem, dimStyle, keyStyle lipgloss.Style) string {
+	var parts []string
+	for _, item := range items {
+		parts = append(parts, keyStyle.Render(item.Key)+dimStyle.Render(" "+item.Action))
+	}
+	return dimStyle.Render("(") + strings.Join(parts, dimStyle.Render(" · ")) + dimStyle.Render(")")
 }

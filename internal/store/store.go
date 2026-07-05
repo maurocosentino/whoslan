@@ -12,16 +12,18 @@ import (
 // DeviceRecord es el estado histórico de un dispositivo: cuándo se lo
 // vio por primera y última vez, y si está online en este momento.
 type DeviceRecord struct {
-	IP           string    `json:"ip"`
-	MAC          string    `json:"mac"`
-	Vendor       string    `json:"vendor"`
-	Name         string    `json:"name"`
-	FirstSeen    time.Time `json:"first_seen"`
-	LastSeen     time.Time `json:"last_seen"`
-	Online       bool      `json:"online"`
-	Acknowledged bool      `json:"acknowledged"`
+	IP            string    `json:"ip"`
+	MAC           string    `json:"mac"`
+	Vendor        string    `json:"vendor"`
+	Name          string    `json:"name"`
+	FirstSeen     time.Time `json:"first_seen"`
+	LastSeen      time.Time `json:"last_seen"`
+	Online        bool      `json:"online"`
+	Acknowledged  bool      `json:"acknowledged"`
+	MissedScans   int       `json:"missed_scans"`
 }
 
+const maxMissedScans = 3
 // Store mantiene el historial de dispositivos, indexado por MAC
 // (a diferencia de la IP, la MAC no cambia por DHCP).
 type Store struct {
@@ -64,9 +66,6 @@ func (s *Store) Save() error {
 	return os.WriteFile(s.path, data, 0644)
 }
 
-// ApplyScan actualiza el historial con los resultados de un escaneo nuevo.
-// Los dispositivos encontrados se marcan online; los que estaban en el
-// historial pero no aparecieron ahora se marcan offline.
 func (s *Store) ApplyScan(found []scanner.Device) {
 	now := time.Now()
 	seenNow := make(map[string]bool)
@@ -76,10 +75,10 @@ func (s *Store) ApplyScan(found []scanner.Device) {
 		record, exists := s.Devices[d.MAC]
 
 		if !exists {
-			// Dispositivo nunca antes visto.
 			s.Devices[d.MAC] = &DeviceRecord{
 				IP: d.IP, MAC: d.MAC, Vendor: d.Vendor,
 				FirstSeen: now, LastSeen: now, Online: true,
+				MissedScans: 0,
 			}
 			continue
 		}
@@ -88,15 +87,20 @@ func (s *Store) ApplyScan(found []scanner.Device) {
 			// Estaba offline, arranca una nueva sesión de conexión.
 			record.FirstSeen = now
 		}
-		record.IP = d.IP // la IP puede haber cambiado por DHCP
+		record.IP = d.IP
 		record.LastSeen = now
 		record.Online = true
+		record.MissedScans = 0 // respondió, reseteamos el contador de fallos
 	}
 
-	// Todo lo que no apareció en este escaneo pasa a offline.
+	// Los que no aparecieron ahora: sumamos un fallo, y solo marcamos
+	// offline si acumularon demasiados fallos consecutivos.
 	for mac, record := range s.Devices {
-		if !seenNow[mac] {
-			record.Online = false
+		if !seenNow[mac] && record.Online {
+			record.MissedScans++
+			if record.MissedScans >= maxMissedScans {
+				record.Online = false
+			}
 		}
 	}
 }

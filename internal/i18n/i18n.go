@@ -2,18 +2,18 @@ package i18n
 
 // Strings agrupa todos los textos visibles de la interfaz para un idioma.
 type Strings struct {
-	Title 			string
+	Title           string
 	ColName         string
 	ColIP           string
 	ColMAC          string
 	ColStatus       string
 	ColDuration     string
-	ColAlert 		string
+	ColAlert        string
 	StatusOnline    string
 	StatusOffline   string
 	ConnectedFor    string
 	DisconnectedFor string
-	HelpBar         string
+	HelpItems       []HelpItem
 	RenamePrompt    string
 	RenameHelp      string
 	ScanError       string
@@ -31,7 +31,13 @@ var es = Strings{
 	StatusOffline:   "Offline",
 	ConnectedFor:    "hace %s",
 	DisconnectedFor: "%s",
-	HelpBar: 		 "(↑/↓ para moverte · a para reconocer · r para renombrar · q para salir · escaneo cada %s)",
+	HelpItems: []HelpItem{
+		{"↑/↓", "moverte"},
+		{"s", "escanear"},
+		{"a", "reconocer"},
+		{"r", "renombrar"},
+		{"q", "salir"},
+	},
 	RenamePrompt:    "Nuevo nombre: ",
 	RenameHelp:      "(enter para confirmar · esc para cancelar)",
 	ScanError:       "Error escaneando: %v",
@@ -49,7 +55,13 @@ var en = Strings{
 	StatusOffline:   "Offline",
 	ConnectedFor:    "%s ago",
 	DisconnectedFor: "%s",
-	HelpBar: 		 "(↑/↓ to move · a to acknowledge · r to rename · q to quit · scanning every %s)",
+	HelpItems: []HelpItem{
+		{"↑/↓", "move"},
+		{"s", "scan"},
+		{"a", "acknowledge"},
+		{"r", "rename"},
+		{"q", "quit"},
+	},
 	RenamePrompt:    "New name: ",
 	RenameHelp:      "(enter to confirm · esc to cancel)",
 	ScanError:       "Scan error: %v",
@@ -64,4 +76,10 @@ func Load(lang string) Strings {
 	default:
 		return es
 	}
+}
+
+// HelpItem representa un atajo de teclado y su descripción.
+type HelpItem struct {
+	Key    string
+	Action string
 }
