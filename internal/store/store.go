@@ -41,10 +41,12 @@ const maxMissedScans = 3
 // Store mantiene el historial de dispositivos, indexado por MAC
 // (a diferencia de la IP, la MAC no cambia por DHCP).
 type Store struct {
-	path      string
-	portsPath string
-	Devices   map[string]*DeviceRecord
-	Ports     map[string]*PortRecord 
+	path       string
+	portsPath  string
+	geoPath    string
+	Devices    map[string]*DeviceRecord
+	Ports      map[string]*PortRecord
+	GeoCache   map[string]string
 }
 
 // Load abre (o crea si no existe) el archivo de historial en disco.
@@ -57,12 +59,18 @@ func Load() (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+	geoPath, err := storePath("geo_cache.json")
+	if err != nil {
+		return nil, err
+	}
 
 	s := &Store{
 		path:      path,
 		portsPath: portsPath,
+		geoPath:   geoPath,
 		Devices:   make(map[string]*DeviceRecord),
 		Ports:     make(map[string]*PortRecord),
+		GeoCache:  make(map[string]string),
 	}
 
 	if data, err := os.ReadFile(path); err == nil {
@@ -70,6 +78,9 @@ func Load() (*Store, error) {
 	}
 	if data, err := os.ReadFile(portsPath); err == nil {
 		json.Unmarshal(data, &s.Ports)
+	}
+	if data, err := os.ReadFile(geoPath); err == nil {
+		json.Unmarshal(data, &s.GeoCache)
 	}
 
 	return s, nil
@@ -82,6 +93,26 @@ func (s *Store) Save() error {
 		return err
 	}
 	return os.WriteFile(s.path, data, 0644)
+}
+
+// CountryFor devuelve el país cacheado para una IP, si ya se consultó antes.
+func (s *Store) CountryFor(ip string) (string, bool) {
+	country, exists := s.GeoCache[ip]
+	return country, exists
+}
+
+// SetCountry guarda el país resuelto para una IP en el cache persistente.
+func (s *Store) SetCountry(ip, country string) {
+	s.GeoCache[ip] = country
+}
+
+// SaveGeoCache persiste el cache de geolocalización a disco.
+func (s *Store) SaveGeoCache() error {
+	data, err := json.MarshalIndent(s.GeoCache, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.geoPath, data, 0644)
 }
 
 func (s *Store) ApplyScan(found []scanner.Device) {

@@ -245,12 +245,21 @@ func (m model) buildConnectionsTable() string {
 
 	rows := make([]table.Row, 0, len(m.connections))
 	for _, c := range m.connections {
-		country := portscan.LookupCountry(remoteIP(c.RemoteAddr))
+		ip := remoteIP(c.RemoteAddr)
+
+		country, cached := m.store.CountryFor(ip)
+		if !cached {
+			country = portscan.LookupCountry(ip)
+			m.store.SetCountry(ip, country)
+		}
+
 		if country == "" {
 			country = "-"
 		}
 		rows = append(rows, table.Row{c.Protocol, c.LocalAddr, c.RemoteAddr, country, c.Status, c.ProcessName})
 	}
+
+	m.store.SaveGeoCache()
 
 	t := table.New(
 		table.WithColumns(columns),

@@ -213,10 +213,6 @@ func Scan() ([]ListeningPort, error) {
 
 	return ports, nil
 }
-// geoCache evita volver a consultar una IP ya resuelta en esta sesión.
-// No es seguro para uso concurrente pesado, pero acá se llama secuencialmente
-// desde un solo goroutine de escaneo, así que alcanza sin mutex.
-var geoCache = make(map[string]string)
 
 // isPrivateIP detecta rangos de IP privados/locales, que no tiene
 // sentido consultar a un servicio de geolocalización externo.
@@ -246,15 +242,12 @@ type geoLookupResponse struct {
 	CountryCode string `json:"countryCode"`
 }
 
-// LookupCountry devuelve el código de país (ej. "US", "AR") de una IP
-// pública, usando un cache en memoria para no repetir consultas. Para
-// IPs privadas o si la consulta falla, devuelve cadena vacía.
+// LookupCountry consulta el país de una IP pública. Para IPs privadas o
+// si la consulta falla, devuelve cadena vacía. No cachea internamente:
+// el llamador (Store) es responsable de cachear el resultado.
 func LookupCountry(ip string) string {
 	if isPrivateIP(ip) {
 		return ""
-	}
-	if cached, exists := geoCache[ip]; exists {
-		return cached
 	}
 
 	client := http.Client{Timeout: 2 * time.Second}
@@ -272,6 +265,5 @@ func LookupCountry(ip string) string {
 		return ""
 	}
 
-	geoCache[ip] = result.CountryCode
 	return result.CountryCode
 }
