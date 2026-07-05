@@ -47,6 +47,7 @@ type model struct {
 	renameInput      textinput.Model
 	t                i18n.Strings
 	screen           screen
+	lang 			 string
 	menuCursor       int
 	ports            []portscan.ListeningPort
 	portsCursor      int
@@ -79,7 +80,7 @@ func keepSudoAlive() {
 
 func main() {
 	iface := flag.String("interface", "enp1s0", "Interfaz de red a escanear (ej: enp1s0, wlan0)")
-	lang := flag.String("lang", "es", "Idioma de la interfaz (es, en)")
+	lang := flag.String("lang", "en", "Interface language (es, en)")
 	flag.Parse()
 
 	if err := ensureSudo(); err != nil {
@@ -95,9 +96,10 @@ func main() {
 	}
 
 	m := model{
-		store:            s,
-		networkInterface: *iface,
-		t:                i18n.Load(*lang),
+	store:            s,
+	networkInterface: *iface,
+	t:                i18n.Load(*lang),
+	lang:             *lang,
 	}
 
 	p := tea.NewProgram(m)
@@ -195,6 +197,14 @@ func (m model) selectMenuItem(key string) (tea.Model, tea.Cmd) {
 	case "i":
 		m.screen = screenInterface
 		return m, m.doGetInterfaceInfo()
+	case "l":
+		if m.lang == "es" {
+			m.lang = "en"
+		} else {
+			m.lang = "es"
+		}
+		m.t = i18n.Load(m.lang)
+		return m, nil
 	case "q":
 		return m, tea.Quit
 	}
