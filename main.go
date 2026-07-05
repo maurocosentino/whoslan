@@ -27,6 +27,13 @@ type scanResultMsg struct {
 	err     error
 }
 
+type screen int
+
+const (
+	screenMenu screen = iota
+	screenDevices
+)
+
 type model struct {
 	store            *store.Store
 	cursor           int
@@ -35,6 +42,8 @@ type model struct {
 	renaming         bool
 	renameInput      textinput.Model
 	t                i18n.Strings
+	screen           screen
+	menuCursor       int
 }
 
 // ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
@@ -100,7 +109,7 @@ func (m model) doScan() tea.Cmd {
 }
 
 func (m model) Init() tea.Cmd {
-	return m.doScan()
+	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -108,20 +117,67 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateRenaming(msg)
 	}
 
-	switch msg := msg.(type) {
-	case scanResultMsg:
-	if msg.err != nil {
-		m.err = msg.err
+	switch m.screen {
+	case screenMenu:
+		return m.updateMenu(msg)
+	case screenDevices:
+		return m.updateDevices(msg)
+	}
+	return m, nil
+}
+
+// updateMenu maneja la navegación del menú principal.
+func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
 		return m, nil
 	}
-	m.err = nil
-	m.store.ApplyScan(msg.devices)
-	m.store.Save()
+
+	switch keyMsg.String() {
+	case "ctrl+c", "q":
+		return m, tea.Quit
+	case "up", "k":
+		if m.menuCursor > 0 {
+			m.menuCursor--
+		}
+	case "down", "j":
+		if m.menuCursor < len(m.t.MenuItems)-1 {
+			m.menuCursor++
+		}
+	case "enter":
+		selected := m.t.MenuItems[m.menuCursor].Key
+		switch selected {
+		case "d":
+			m.screen = screenDevices
+			m.cursor = 0
+			return m, m.doScan()
+		case "q":
+			return m, tea.Quit
+		}
+	}
 	return m, nil
+}
+
+// updateDevices contiene toda la lógica que antes vivía directamente en
+// Update: navegación, escaneo manual, reconocer, renombrar.
+func (m model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case scanResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.store.ApplyScan(msg.devices)
+		m.store.Save()
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -149,7 +205,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, textinput.Blink
 			}
 		case "s":
-			return m, m.doScan()	
+			return m, m.doScan()
 		}
 	}
 	return m, nil
@@ -317,11 +373,45 @@ func (m model) buildTable() string {
 	return dimOfflineRows(rendered, devices, m.cursor)
 }
 
+func (m model) viewMenu() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.AppTitle) + "\n")
+	b.WriteString(subtitleStyle.Render(m.t.AppSubtitle) + "\n\n")
+
+	for i, item := range m.t.MenuItems {
+		line := fmt.Sprintf("[%s] %-15s %s", item.Key, item.Label, item.Description)
+		if i == m.menuCursor {
+			b.WriteString(selectedStyle.Render("→ "+line) + "\n")
+		} else {
+			b.WriteString("  " + descStyle.Render(line) + "\n")
+		}
+	}
+
+	b.WriteString("\n" + subtitleStyle.Render(m.t.MenuHelp) + "\n")
+
+	return b.String()
+}
+
 func (m model) View() string {
+	if m.screen == screenMenu {
+		return m.viewMenu()
+	}
+	return m.viewDevices()
+}
+
+// viewDevices es tu View() original, renombrado.
+func (m model) viewDevices() string {
 	var b strings.Builder
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
 
 	b.WriteString(titleStyle.Render(m.t.Title) + "\n\n")
 
@@ -334,8 +424,6 @@ func (m model) View() string {
 		b.WriteString("\n" + dimStyle.Render(m.t.RenameHelp) + "\n")
 		return b.String()
 	}
-
-	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
 
 	b.WriteString(m.buildTable())
 	b.WriteString("\n" + buildHelpBar(m.t.HelpItems, dimStyle, keyStyle) + "\n")

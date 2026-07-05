@@ -17,10 +17,21 @@ type Strings struct {
 	RenamePrompt    string
 	RenameHelp      string
 	ScanError       string
+	AppTitle    	string
+	AppSubtitle 	string
+	MenuItems   	[]MenuItem
+	MenuHelp 		string
 }
 
 var es = Strings{
 	Title: 			 "whoslan — dispositivos",
+	AppTitle:    "whoslan",
+	AppSubtitle: "Panel de red y seguridad",
+	MenuItems: []MenuItem{
+		{"d", "Dispositivos", "Ver y gestionar dispositivos conectados"},
+		{"q", "Salir", "Cerrar whoslan"},
+	},
+	MenuHelp: 		 "(↑/↓ para moverte · enter para seleccionar)",
 	ColName:         "Nombre",
 	ColIP:           "IP",
 	ColMAC:          "MAC",
@@ -45,6 +56,13 @@ var es = Strings{
 
 var en = Strings{
 	Title: 			 "whoslan — devices",
+	AppTitle:    "whoslan",
+	AppSubtitle: "Network & security panel",
+	MenuItems: []MenuItem{
+		{"d", "Devices", "View and manage connected devices"},
+		{"q", "Quit", "Exit whoslan"},
+	},
+	MenuHelp: 		 "(↑/↓ to move · enter to select)",
 	ColName:         "Name",
 	ColIP:           "IP",
 	ColMAC:          "MAC",
@@ -65,6 +83,13 @@ var en = Strings{
 	RenamePrompt:    "New name: ",
 	RenameHelp:      "(enter to confirm · esc to cancel)",
 	ScanError:       "Scan error: %v",
+}
+
+// MenuItem representa una opción del menú principal.
+type MenuItem struct {
+	Key         string
+	Label       string
+	Description string
 }
 
 // Load devuelve el conjunto de strings para el código de idioma dado.
