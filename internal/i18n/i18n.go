@@ -2,8 +2,7 @@ package i18n
 
 // Strings agrupa todos los textos visibles de la interfaz para un idioma.
 type Strings struct {
-	TitleOnline     string
-	TitleHistory    string
+	Title 			string
 	ColName         string
 	ColIP           string
 	ColMAC          string
@@ -21,8 +20,7 @@ type Strings struct {
 }
 
 var es = Strings{
-	TitleOnline:     "whoslan — dispositivos online",
-	TitleHistory:    "whoslan — historial completo",
+	Title: 			 "whoslan — dispositivos",
 	ColName:         "Nombre",
 	ColIP:           "IP",
 	ColMAC:          "MAC",
@@ -33,15 +31,14 @@ var es = Strings{
 	StatusOffline:   "Offline",
 	ConnectedFor:    "hace %s",
 	DisconnectedFor: "%s",
-	HelpBar:         "(↑/↓ para moverte · h para historial/online · a para reconocer · r para renombrar · q para salir · escaneo cada %s)",
+	HelpBar: 		 "(↑/↓ para moverte · a para reconocer · r para renombrar · q para salir · escaneo cada %s)",
 	RenamePrompt:    "Nuevo nombre: ",
 	RenameHelp:      "(enter para confirmar · esc para cancelar)",
 	ScanError:       "Error escaneando: %v",
 }
 
 var en = Strings{
-	TitleOnline:     "whoslan — online devices",
-	TitleHistory:    "whoslan — full history",
+	Title: 			 "whoslan — devices",
 	ColName:         "Name",
 	ColIP:           "IP",
 	ColMAC:          "MAC",
@@ -52,7 +49,7 @@ var en = Strings{
 	StatusOffline:   "Offline",
 	ConnectedFor:    "%s ago",
 	DisconnectedFor: "%s",
-	HelpBar:         "(↑/↓ to move · h for history/online · a to acknowledge · r to rename · q to quit · scanning every %s)",
+	HelpBar: 		 "(↑/↓ to move · a to acknowledge · r to rename · q to quit · scanning every %s)",
 	RenamePrompt:    "New name: ",
 	RenameHelp:      "(enter to confirm · esc to cancel)",
 	ScanError:       "Scan error: %v",

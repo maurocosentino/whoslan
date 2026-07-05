@@ -31,7 +31,6 @@ type model struct {
 	store            *store.Store
 	cursor           int
 	err              error
-	showHistory      bool
 	networkInterface string
 	scanInterval     time.Duration
 	renaming         bool
@@ -140,9 +139,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.currentList())-1 {
 				m.cursor++
 			}
-		case "h":
-			m.showHistory = !m.showHistory
-			m.cursor = 0
 		case "a":
 			devices := m.currentList()
 			if m.cursor < len(devices) {
@@ -191,18 +187,31 @@ func (m model) updateRenaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// onlineDevices filtra y ordena (por IP) los dispositivos actualmente online.
-func onlineDevices(s *store.Store) []*store.DeviceRecord {
-	var result []*store.DeviceRecord
+// orderedDevices devuelve todos los dispositivos en un único orden:
+// primero los online (por IP), después los offline (por LastSeen
+// descendente, el que se desconectó más recientemente arriba).
+func orderedDevices(s *store.Store) []*store.DeviceRecord {
+	var online, offline []*store.DeviceRecord
+
 	for _, d := range s.Devices {
 		if d.Online {
-			result = append(result, d)
+			online = append(online, d)
+		} else {
+			offline = append(offline, d)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].IP < result[j].IP
+
+	sort.SliceStable(online, func(i, j int) bool {
+		return online[i].IP < online[j].IP
 	})
-	return result
+	sort.SliceStable(offline, func(i, j int) bool {
+		if !offline[i].LastSeen.Equal(offline[j].LastSeen) {
+			return offline[i].LastSeen.After(offline[j].LastSeen)
+		}
+		return offline[i].MAC < offline[j].MAC
+	})
+
+	return append(online, offline...)
 }
 
 
@@ -216,12 +225,8 @@ func formatSince(t time.Time, format string) string {
 	return t.Format("02/01 15:04")
 }
 
-// currentList devuelve la lista a mostrar según la vista activa.
 func (m model) currentList() []*store.DeviceRecord {
-	if m.showHistory {
-		return allDevices(m.store)
-	}
-	return onlineDevices(m.store)
+	return orderedDevices(m.store)
 }
 
 // displayName devuelve el nombre asignado al dispositivo, o el vendor
@@ -231,25 +236,6 @@ func displayName(d *store.DeviceRecord) string {
 		return d.Name
 	}
 	return d.Vendor
-}
-
-// recentDevices devuelve todos los dispositivos vistos dentro de la
-// ventana de tiempo indicada (online u offline), ordenados por LastSeen
-// descendente (los más recientes primero).
-// allDevices devuelve todos los dispositivos alguna vez vistos,
-// ordenados por LastSeen descendente (los más recientes primero).
-func allDevices(s *store.Store) []*store.DeviceRecord {
-	var result []*store.DeviceRecord
-	for _, d := range s.Devices {
-		result = append(result, d)
-	}
-	sort.SliceStable(result, func(i, j int) bool {
-		if !result[i].LastSeen.Equal(result[j].LastSeen) {
-			return result[i].LastSeen.After(result[j].LastSeen)
-		}
-		return result[i].MAC < result[j].MAC // desempate determinístico
-	})
-	return result
 }
 
 // formatDuration convierte una duración a un texto legible tipo "2h 15m".
@@ -334,7 +320,8 @@ func (m model) buildTable() string {
 	)
 	t.SetCursor(m.cursor)
 
-	return t.View()
+	rendered := t.View()
+	return dimOfflineRows(rendered, devices, m.cursor)
 }
 
 func (m model) View() string {
@@ -343,11 +330,7 @@ func (m model) View() string {
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	title := m.t.TitleOnline
-	if m.showHistory {
-		title = m.t.TitleHistory
-	}
-	b.WriteString(titleStyle.Render(title) + "\n\n")
+	b.WriteString(titleStyle.Render(m.t.Title) + "\n\n")
 
 	if m.err != nil {
 		b.WriteString(fmt.Sprintf(m.t.ScanError, m.err))
@@ -375,4 +358,25 @@ func isUnknownVendor(vendor string) bool {
 // manualmente por el usuario (tecla "a").
 func isNewDevice(d *store.DeviceRecord) bool {
 	return !d.Acknowledged
+}
+
+// dimOfflineRows recorre el texto ya renderizado por la tabla línea por
+// línea, y pinta en gris las filas de dispositivos offline (salvo la
+// fila actualmente seleccionada, que ya tiene su propio resaltado).
+func dimOfflineRows(rendered string, devices []*store.DeviceRecord, cursor int) string {
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	lines := strings.Split(rendered, "\n")
+
+	// La línea 0 es el header; las filas de datos arrancan en la línea 1.
+	for i, d := range devices {
+		lineIdx := i + 1
+		if lineIdx >= len(lines) {
+			break
+		}
+		if !d.Online && i != cursor {
+			lines[lineIdx] = dimStyle.Render(lines[lineIdx])
+		}
+	}
+
+	return strings.Join(lines, "\n")
 }
