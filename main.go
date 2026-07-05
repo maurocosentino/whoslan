@@ -35,6 +35,7 @@ const (
 	screenDevices
 	screenPorts
 	screenConnections
+	screenInterface
 )
 
 type model struct {
@@ -51,6 +52,7 @@ type model struct {
 	portsCursor      int
 	connections    []portscan.Connection
 	connCursor     int
+	ifaceInfo        portscan.InterfaceInfo
 }
 
 // ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
@@ -133,6 +135,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updatePorts(msg)
 	case screenConnections:
 		return m.updateConnections(msg)
+	case screenInterface:
+		return m.updateInterface(msg)
 	}
 	return m, nil
 }
@@ -170,6 +174,9 @@ func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenConnections
 			m.connCursor = 0
 			return m, m.doConnScan()
+		case "i":
+			m.screen = screenInterface
+			return m, m.doGetInterfaceInfo()
 		case "q":
 			return m, tea.Quit
 		}
@@ -289,6 +296,30 @@ func (m model) updateConnections(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "s":
 			return m, m.doConnScan()
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateInterface(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case ifaceInfoMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.ifaceInfo = msg.info
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		case "s":
+			return m, m.doGetInterfaceInfo()
 		}
 	}
 	return m, nil
@@ -508,6 +539,8 @@ func (m model) View() string {
 		return m.viewPorts()
 	case screenConnections:
 		return m.viewConnections()
+	case screenInterface:
+		return m.viewInterface()
 	default:
 		return m.viewDevices()
 	}
@@ -537,6 +570,49 @@ func (m model) viewDevices() string {
 	b.WriteString("\n" + buildHelpBar(m.t.HelpItems, dimStyle, keyStyle) + "\n")
 
 	return b.String()
+}
+
+func (m model) viewInterface() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.InterfaceTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.InterfaceError, m.err) + "\n\n")
+	}
+
+	na := m.t.NotAvailable
+	fields := []struct {
+		label string
+		value string
+	}{
+		{m.t.LabelInterface, orDefault(m.ifaceInfo.Name, na)},
+		{m.t.LabelLocalIP, orDefault(m.ifaceInfo.LocalIP, na)},
+		{m.t.LabelNetmask, orDefault(m.ifaceInfo.Netmask, na)},
+		{m.t.LabelGateway, orDefault(m.ifaceInfo.Gateway, na)},
+		{m.t.LabelPublicIP, orDefault(m.ifaceInfo.PublicIP, na)},
+	}
+
+	for _, f := range fields {
+		b.WriteString(fmt.Sprintf("%s%-14s%s\n", labelStyle.Render(""), f.label+":", f.value))
+	}
+
+	b.WriteString("\n" + buildHelpBar(m.t.InterfaceHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+// orDefault devuelve value, o fallback si value está vacío.
+func orDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 // isUnknownVendor detecta MACs con randomización/administración local,
@@ -676,5 +752,17 @@ func (m model) doConnScan() tea.Cmd {
 	return func() tea.Msg {
 		conns, err := portscan.ScanConnections()
 		return connScanResultMsg{connections: conns, err: err}
+	}
+}
+
+type ifaceInfoMsg struct {
+	info portscan.InterfaceInfo
+	err  error
+}
+
+func (m model) doGetInterfaceInfo() tea.Cmd {
+	return func() tea.Msg {
+		info, err := portscan.GetInterfaceInfo(m.networkInterface)
+		return ifaceInfoMsg{info: info, err: err}
 	}
 }

@@ -36,6 +36,16 @@ type Strings struct {
 	ConnTitle     string
 	ConnHelp      []HelpItem
 	ConnError     string
+
+	InterfaceTitle    string
+	LabelInterface    string
+	LabelLocalIP      string
+	LabelNetmask      string
+	LabelGateway      string
+	LabelPublicIP     string
+	InterfaceHelp     []HelpItem
+	InterfaceError    string
+	NotAvailable      string
 }
 
 var es = Strings{
@@ -46,6 +56,7 @@ var es = Strings{
 		{"d", "Dispositivos", "Ver y gestionar dispositivos conectados"},
 		{"p", "Puertos", "Ver puertos abiertos y procesos"},
 		{"c", "Conexiones", "Ver conexiones de red activas"},
+		{"i", "Interfaz", "Ver IP, gateway y datos de red"},
 		{"q", "Salir", "Cerrar whoslan"},
 	},
 	MenuHelp: 		 "(↑/↓ para moverte · enter para seleccionar)",
@@ -91,6 +102,18 @@ var es = Strings{
 		{"esc", "volver"},
 	},
 	ConnError: "Error escaneando conexiones: %v",
+	InterfaceTitle: "whoslan — interfaz de red",
+	LabelInterface: "Interfaz",
+	LabelLocalIP:   "IP local",
+	LabelNetmask:   "Máscara",
+	LabelGateway:   "Gateway",
+	LabelPublicIP:  "IP pública",
+	InterfaceHelp: []HelpItem{
+		{"s", "actualizar"},
+		{"esc", "volver"},
+	},
+	InterfaceError: "Error obteniendo datos de red: %v",
+	NotAvailable:   "no disponible",
 }
 
 var en = Strings{
@@ -101,6 +124,7 @@ var en = Strings{
 		{"d", "Devices", "View and manage connected devices"},
 		{"p", "Ports", "View open ports and processes"},
 		{"c", "Connections", "View active network connections"},
+		{"i", "Interface", "View IP, gateway and network info"},
 		{"q", "Quit", "Exit whoslan"},
 	},
 	MenuHelp: 		 "(↑/↓ to move · enter to select)",
@@ -146,6 +170,18 @@ var en = Strings{
 		{"esc", "back"},
 	},
 	ConnError: "Error scanning connections: %v",
+	InterfaceTitle: "whoslan — network interface",
+	LabelInterface: "Interface",
+	LabelLocalIP:   "Local IP",
+	LabelNetmask:   "Netmask",
+	LabelGateway:   "Gateway",
+	LabelPublicIP:  "Public IP",
+	InterfaceHelp: []HelpItem{
+		{"s", "refresh"},
+		{"esc", "back"},
+	},
+	InterfaceError: "Error getting network info: %v",
+	NotAvailable:   "not available",
 }
 
 // MenuItem representa una opción del menú principal.
