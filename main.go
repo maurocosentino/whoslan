@@ -17,6 +17,7 @@ import (
 	"whoslan/internal/scanner"
 	"whoslan/internal/store"
 	"whoslan/internal/i18n"
+	"whoslan/internal/portscan"
 )
 
 // scanResultMsg es el mensaje que Bubble Tea recibe cuando termina un
@@ -27,16 +28,31 @@ type scanResultMsg struct {
 	err     error
 }
 
+type screen int
+
+const (
+	screenMenu screen = iota
+	screenDevices
+	screenPorts
+	screenConnections
+	screenInterface
+)
+
 type model struct {
 	store            *store.Store
 	cursor           int
 	err              error
-	showHistory      bool
 	networkInterface string
-	scanInterval     time.Duration
 	renaming         bool
 	renameInput      textinput.Model
 	t                i18n.Strings
+	screen           screen
+	menuCursor       int
+	ports            []portscan.ListeningPort
+	portsCursor      int
+	connections    []portscan.Connection
+	connCursor     int
+	ifaceInfo        portscan.InterfaceInfo
 }
 
 // ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
@@ -63,7 +79,6 @@ func keepSudoAlive() {
 
 func main() {
 	iface := flag.String("interface", "enp1s0", "Interfaz de red a escanear (ej: enp1s0, wlan0)")
-	interval := flag.Duration("interval", 30*time.Second, "Intervalo entre escaneos (ej: 30s, 1m)")
 	lang := flag.String("lang", "es", "Idioma de la interfaz (es, en)")
 	flag.Parse()
 
@@ -82,7 +97,6 @@ func main() {
 	m := model{
 		store:            s,
 		networkInterface: *iface,
-		scanInterval:     *interval,
 		t:                i18n.Load(*lang),
 	}
 
@@ -103,14 +117,8 @@ func (m model) doScan() tea.Cmd {
 	}
 }
 
-func (m model) tick() tea.Cmd {
-	return tea.Tick(m.scanInterval, func(t time.Time) tea.Msg {
-		return m.doScan()()
-	})
-}
-
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.doScan(), m.tick())
+	return nil
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -118,20 +126,101 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateRenaming(msg)
 	}
 
+	switch m.screen {
+	case screenMenu:
+		return m.updateMenu(msg)
+	case screenDevices:
+		return m.updateDevices(msg)
+	case screenPorts:
+		return m.updatePorts(msg)
+	case screenConnections:
+		return m.updateConnections(msg)
+	case screenInterface:
+		return m.updateInterface(msg)
+	}
+	return m, nil
+}
+
+func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
+	keyMsg, ok := msg.(tea.KeyMsg)
+	if !ok {
+		return m, nil
+	}
+
+	switch keyMsg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+	case "up", "k":
+		if m.menuCursor > 0 {
+			m.menuCursor--
+		}
+		return m, nil
+	case "down", "j":
+		if m.menuCursor < len(m.t.MenuItems)-1 {
+			m.menuCursor++
+		}
+		return m, nil
+	case "enter":
+		return m.selectMenuItem(m.t.MenuItems[m.menuCursor].Key)
+	}
+
+	// Atajo directo: si la tecla coincide con el Key de algún item
+	// del menú, lo seleccionamos sin necesidad de navegar primero.
+	for i, item := range m.t.MenuItems {
+		if item.Key == keyMsg.String() {
+			m.menuCursor = i
+			return m.selectMenuItem(item.Key)
+		}
+	}
+
+	return m, nil
+}
+
+// selectMenuItem centraliza qué pasa al confirmar una opción del menú,
+// sea por Enter (con el cursor ya posicionado) o por atajo directo de letra.
+func (m model) selectMenuItem(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "d":
+		m.screen = screenDevices
+		m.cursor = 0
+		return m, m.doScan()
+	case "p":
+		m.screen = screenPorts
+		m.portsCursor = 0
+		return m, m.doPortScan()
+	case "c":
+		m.screen = screenConnections
+		m.connCursor = 0
+		return m, m.doConnScan()
+	case "i":
+		m.screen = screenInterface
+		return m, m.doGetInterfaceInfo()
+	case "q":
+		return m, tea.Quit
+	}
+	return m, nil
+}
+
+// updateDevices contiene toda la lógica que antes vivía directamente en
+// Update: navegación, escaneo manual, reconocer, renombrar.
+func (m model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case scanResultMsg:
 		if msg.err != nil {
 			m.err = msg.err
-			return m, m.tick()
+			return m, nil
 		}
 		m.err = nil
 		m.store.ApplyScan(msg.devices)
 		m.store.Save()
-		return m, m.tick()
+		return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -140,9 +229,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor < len(m.currentList())-1 {
 				m.cursor++
 			}
-		case "h":
-			m.showHistory = !m.showHistory
-			m.cursor = 0
 		case "a":
 			devices := m.currentList()
 			if m.cursor < len(devices) {
@@ -161,6 +247,96 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.renameInput = ti
 				return m, textinput.Blink
 			}
+		case "s":
+			return m, m.doScan()
+		}
+	}
+	return m, nil
+}
+
+func (m model) updatePorts(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case portScanResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.ports = msg.ports
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		case "up", "k":
+			if m.portsCursor > 0 {
+				m.portsCursor--
+			}
+		case "down", "j":
+			if m.portsCursor < len(m.ports)-1 {
+				m.portsCursor++
+			}
+		case "s":
+			return m, m.doPortScan()
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateConnections(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case connScanResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.connections = msg.connections
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		case "up", "k":
+			if m.connCursor > 0 {
+				m.connCursor--
+			}
+		case "down", "j":
+			if m.connCursor < len(m.connections)-1 {
+				m.connCursor++
+			}
+		case "s":
+			return m, m.doConnScan()
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateInterface(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case ifaceInfoMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.ifaceInfo = msg.info
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		case "s":
+			return m, m.doGetInterfaceInfo()
 		}
 	}
 	return m, nil
@@ -191,18 +367,31 @@ func (m model) updateRenaming(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// onlineDevices filtra y ordena (por IP) los dispositivos actualmente online.
-func onlineDevices(s *store.Store) []*store.DeviceRecord {
-	var result []*store.DeviceRecord
+// orderedDevices devuelve todos los dispositivos en un único orden:
+// primero los online (por IP), después los offline (por LastSeen
+// descendente, el que se desconectó más recientemente arriba).
+func orderedDevices(s *store.Store) []*store.DeviceRecord {
+	var online, offline []*store.DeviceRecord
+
 	for _, d := range s.Devices {
 		if d.Online {
-			result = append(result, d)
+			online = append(online, d)
+		} else {
+			offline = append(offline, d)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return result[i].IP < result[j].IP
+
+	sort.SliceStable(online, func(i, j int) bool {
+		return online[i].IP < online[j].IP
 	})
-	return result
+	sort.SliceStable(offline, func(i, j int) bool {
+		if !offline[i].LastSeen.Equal(offline[j].LastSeen) {
+			return offline[i].LastSeen.After(offline[j].LastSeen)
+		}
+		return offline[i].MAC < offline[j].MAC
+	})
+
+	return append(online, offline...)
 }
 
 
@@ -216,12 +405,8 @@ func formatSince(t time.Time, format string) string {
 	return t.Format("02/01 15:04")
 }
 
-// currentList devuelve la lista a mostrar según la vista activa.
 func (m model) currentList() []*store.DeviceRecord {
-	if m.showHistory {
-		return allDevices(m.store)
-	}
-	return onlineDevices(m.store)
+	return orderedDevices(m.store)
 }
 
 // displayName devuelve el nombre asignado al dispositivo, o el vendor
@@ -231,25 +416,6 @@ func displayName(d *store.DeviceRecord) string {
 		return d.Name
 	}
 	return d.Vendor
-}
-
-// recentDevices devuelve todos los dispositivos vistos dentro de la
-// ventana de tiempo indicada (online u offline), ordenados por LastSeen
-// descendente (los más recientes primero).
-// allDevices devuelve todos los dispositivos alguna vez vistos,
-// ordenados por LastSeen descendente (los más recientes primero).
-func allDevices(s *store.Store) []*store.DeviceRecord {
-	var result []*store.DeviceRecord
-	for _, d := range s.Devices {
-		result = append(result, d)
-	}
-	sort.SliceStable(result, func(i, j int) bool {
-		if !result[i].LastSeen.Equal(result[j].LastSeen) {
-			return result[i].LastSeen.After(result[j].LastSeen)
-		}
-		return result[i].MAC < result[j].MAC // desempate determinístico
-	})
-	return result
 }
 
 // formatDuration convierte una duración a un texto legible tipo "2h 15m".
@@ -334,20 +500,78 @@ func (m model) buildTable() string {
 	)
 	t.SetCursor(m.cursor)
 
-	return t.View()
+	rendered := t.View()
+	return dimOfflineRows(rendered, devices, m.cursor)
 }
 
-func (m model) View() string {
+func (m model) viewMenu() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.AppTitle) + "\n")
+	b.WriteString(subtitleStyle.Render(m.t.AppSubtitle) + "\n\n")
+
+	for i, item := range m.t.MenuItems {
+		line := fmt.Sprintf("[%s] %-15s %s", item.Key, item.Label, item.Description)
+		if i == m.menuCursor {
+			b.WriteString(selectedStyle.Render("→ "+line) + "\n")
+		} else {
+			b.WriteString("  " + descStyle.Render(line) + "\n")
+		}
+	}
+
+	b.WriteString("\n" + subtitleStyle.Render(m.t.MenuHelp) + "\n")
+
+	return b.String()
+}
+
+func (m model) viewPorts() string {
 	var b strings.Builder
 
 	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
 
-	title := m.t.TitleOnline
-	if m.showHistory {
-		title = m.t.TitleHistory
+	b.WriteString(titleStyle.Render(m.t.PortsTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.PortsError, m.err))
 	}
-	b.WriteString(titleStyle.Render(title) + "\n\n")
+
+	b.WriteString(m.buildPortsTable())
+	b.WriteString("\n" + buildHelpBar(m.t.PortsHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+func (m model) View() string {
+	switch m.screen {
+	case screenMenu:
+		return m.viewMenu()
+	case screenPorts:
+		return m.viewPorts()
+	case screenConnections:
+		return m.viewConnections()
+	case screenInterface:
+		return m.viewInterface()
+	default:
+		return m.viewDevices()
+	}
+}
+
+// viewDevices es tu View() original, renombrado.
+func (m model) viewDevices() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.Title) + "\n\n")
 
 	if m.err != nil {
 		b.WriteString(fmt.Sprintf(m.t.ScanError, m.err))
@@ -360,9 +584,52 @@ func (m model) View() string {
 	}
 
 	b.WriteString(m.buildTable())
-	b.WriteString("\n" + dimStyle.Render(fmt.Sprintf(m.t.HelpBar, m.scanInterval)) + "\n")
+	b.WriteString("\n" + buildHelpBar(m.t.HelpItems, dimStyle, keyStyle) + "\n")
 
 	return b.String()
+}
+
+func (m model) viewInterface() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.InterfaceTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.InterfaceError, m.err) + "\n\n")
+	}
+
+	na := m.t.NotAvailable
+	fields := []struct {
+		label string
+		value string
+	}{
+		{m.t.LabelInterface, orDefault(m.ifaceInfo.Name, na)},
+		{m.t.LabelLocalIP, orDefault(m.ifaceInfo.LocalIP, na)},
+		{m.t.LabelNetmask, orDefault(m.ifaceInfo.Netmask, na)},
+		{m.t.LabelGateway, orDefault(m.ifaceInfo.Gateway, na)},
+		{m.t.LabelPublicIP, orDefault(m.ifaceInfo.PublicIP, na)},
+	}
+
+	for _, f := range fields {
+		b.WriteString(fmt.Sprintf("%s%-14s%s\n", labelStyle.Render(""), f.label+":", f.value))
+	}
+
+	b.WriteString("\n" + buildHelpBar(m.t.InterfaceHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+// orDefault devuelve value, o fallback si value está vacío.
+func orDefault(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
 }
 
 // isUnknownVendor detecta MACs con randomización/administración local,
@@ -375,4 +642,144 @@ func isUnknownVendor(vendor string) bool {
 // manualmente por el usuario (tecla "a").
 func isNewDevice(d *store.DeviceRecord) bool {
 	return !d.Acknowledged
+}
+
+// dimOfflineRows recorre el texto ya renderizado por la tabla línea por
+// línea, y pinta en gris las filas de dispositivos offline (salvo la
+// fila actualmente seleccionada, que ya tiene su propio resaltado).
+func dimOfflineRows(rendered string, devices []*store.DeviceRecord, cursor int) string {
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	lines := strings.Split(rendered, "\n")
+
+	// La línea 0 es el header; las filas de datos arrancan en la línea 1.
+	for i, d := range devices {
+		lineIdx := i + 1
+		if lineIdx >= len(lines) {
+			break
+		}
+		if !d.Online && i != cursor {
+			lines[lineIdx] = dimStyle.Render(lines[lineIdx])
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+// buildHelpBar arma la barra de ayuda, resaltando en negrita solo la
+// tecla de cada atajo (no la descripción completa).
+func buildHelpBar(items []i18n.HelpItem, dimStyle, keyStyle lipgloss.Style) string {
+	var parts []string
+	for _, item := range items {
+		parts = append(parts, keyStyle.Render(item.Key)+dimStyle.Render(" "+item.Action))
+	}
+	return dimStyle.Render("(") + strings.Join(parts, dimStyle.Render(" · ")) + dimStyle.Render(")")
+}
+
+func (m model) buildPortsTable() string {
+	columns := []table.Column{
+		{Title: m.t.ColPort, Width: 8},
+		{Title: m.t.ColProtocol, Width: 10},
+		{Title: m.t.ColProcess, Width: 25},
+		{Title: m.t.ColPID, Width: 8},
+	}
+
+	rows := make([]table.Row, 0, len(m.ports))
+	for _, p := range m.ports {
+		rows = append(rows, table.Row{
+			fmt.Sprintf("%d", p.Port),
+			p.Protocol,
+			p.ProcessName,
+			fmt.Sprintf("%d", p.PID),
+		})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.portsCursor)
+
+	return t.View()
+}
+
+func (m model) buildConnectionsTable() string {
+	columns := []table.Column{
+		{Title: m.t.ColProtocol, Width: 10},
+		{Title: m.t.ColLocal, Width: 22},
+		{Title: m.t.ColRemote, Width: 22},
+		{Title: m.t.ColConnStatus, Width: 14},
+		{Title: m.t.ColProcess, Width: 20},
+	}
+
+	rows := make([]table.Row, 0, len(m.connections))
+	for _, c := range m.connections {
+		rows = append(rows, table.Row{c.Protocol, c.LocalAddr, c.RemoteAddr, c.Status, c.ProcessName})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.connCursor)
+
+	return t.View()
+}
+
+func (m model) viewConnections() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.ConnTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.ConnError, m.err))
+	}
+
+	b.WriteString(m.buildConnectionsTable())
+	b.WriteString("\n" + buildHelpBar(m.t.ConnHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+type portScanResultMsg struct {
+	ports []portscan.ListeningPort
+	err   error
+}
+
+func (m model) doPortScan() tea.Cmd {
+	return func() tea.Msg {
+		ports, err := portscan.Scan()
+		return portScanResultMsg{ports: ports, err: err}
+	}
+}
+
+type connScanResultMsg struct {
+	connections []portscan.Connection
+	err         error
+}
+
+func (m model) doConnScan() tea.Cmd {
+	return func() tea.Msg {
+		conns, err := portscan.ScanConnections()
+		return connScanResultMsg{connections: conns, err: err}
+	}
+}
+
+type ifaceInfoMsg struct {
+	info portscan.InterfaceInfo
+	err  error
+}
+
+func (m model) doGetInterfaceInfo() tea.Cmd {
+	return func() tea.Msg {
+		info, err := portscan.GetInterfaceInfo(m.networkInterface)
+		return ifaceInfoMsg{info: info, err: err}
+	}
 }
