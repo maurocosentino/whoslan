@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"encoding/json"
 	"time"
 
 	psnet "github.com/shirou/gopsutil/v3/net"
@@ -211,4 +212,66 @@ func Scan() ([]ListeningPort, error) {
 	}
 
 	return ports, nil
+}
+// geoCache evita volver a consultar una IP ya resuelta en esta sesión.
+// No es seguro para uso concurrente pesado, pero acá se llama secuencialmente
+// desde un solo goroutine de escaneo, así que alcanza sin mutex.
+var geoCache = make(map[string]string)
+
+// isPrivateIP detecta rangos de IP privados/locales, que no tiene
+// sentido consultar a un servicio de geolocalización externo.
+func isPrivateIP(ip string) bool {
+	parsedIP := net.ParseIP(ip)
+	if parsedIP == nil {
+		return true // no es una IP válida, la tratamos como "no consultable"
+	}
+	privateRanges := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+	}
+	for _, cidr := range privateRanges {
+		_, block, _ := net.ParseCIDR(cidr)
+		if block.Contains(parsedIP) {
+			return true
+		}
+	}
+	return false
+}
+
+// geoLookupResponse es la forma de la respuesta JSON de ip-api.com.
+type geoLookupResponse struct {
+	Status      string `json:"status"`
+	CountryCode string `json:"countryCode"`
+}
+
+// LookupCountry devuelve el código de país (ej. "US", "AR") de una IP
+// pública, usando un cache en memoria para no repetir consultas. Para
+// IPs privadas o si la consulta falla, devuelve cadena vacía.
+func LookupCountry(ip string) string {
+	if isPrivateIP(ip) {
+		return ""
+	}
+	if cached, exists := geoCache[ip]; exists {
+		return cached
+	}
+
+	client := http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(fmt.Sprintf("http://ip-api.com/json/%s?fields=status,countryCode", ip))
+	if err != nil {
+		return ""
+	}
+	defer resp.Body.Close()
+
+	var result geoLookupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return ""
+	}
+	if result.Status != "success" {
+		return ""
+	}
+
+	geoCache[ip] = result.CountryCode
+	return result.CountryCode
 }

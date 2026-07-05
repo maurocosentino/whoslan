@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/common-nighthawk/go-figure"
+	"whoslan/internal/portscan"
 )
 
 func (m model) View() string {
@@ -237,13 +238,18 @@ func (m model) buildConnectionsTable() string {
 		{Title: m.t.ColProtocol, Width: 10},
 		{Title: m.t.ColLocal, Width: 22},
 		{Title: m.t.ColRemote, Width: 22},
+		{Title: m.t.ColCountry, Width: 8},
 		{Title: m.t.ColConnStatus, Width: 14},
 		{Title: m.t.ColProcess, Width: 20},
 	}
 
 	rows := make([]table.Row, 0, len(m.connections))
 	for _, c := range m.connections {
-		rows = append(rows, table.Row{c.Protocol, c.LocalAddr, c.RemoteAddr, c.Status, c.ProcessName})
+		country := portscan.LookupCountry(remoteIP(c.RemoteAddr))
+		if country == "" {
+			country = "-"
+		}
+		rows = append(rows, table.Row{c.Protocol, c.LocalAddr, c.RemoteAddr, country, c.Status, c.ProcessName})
 	}
 
 	t := table.New(
@@ -255,6 +261,15 @@ func (m model) buildConnectionsTable() string {
 	t.SetCursor(m.connCursor)
 
 	return t.View()
+}
+
+// remoteIP extrae solo la IP (sin puerto) de un string "IP:puerto".
+func remoteIP(addr string) string {
+	idx := strings.LastIndex(addr, ":")
+	if idx == -1 {
+		return addr
+	}
+	return addr[:idx]
 }
 
 func (m model) viewInterface() string {

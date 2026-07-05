@@ -32,6 +32,7 @@ type Strings struct {
 
 	ColLocal      string
 	ColRemote     string
+	ColCountry	   string
 	ColConnStatus string
 	ConnTitle     string
 	ConnHelp      []HelpItem
@@ -95,6 +96,7 @@ var es = Strings{
 	},
 	PortsError:    "Error escaneando puertos: %v",
 	ColLocal:      "Local",
+	ColCountry:    "País",
 	ColRemote:     "Remoto",
 	ColConnStatus: "Estado",
 	ConnTitle:     "whoslan — conexiones activas",
@@ -165,6 +167,7 @@ var en = Strings{
 	},
 	PortsError:    "Error scanning ports: %v",
 	ColLocal:      "Local",
+	ColCountry:    "Country",
 	ColRemote:     "Remote",
 	ColConnStatus: "Status",
 	ConnTitle:     "whoslan — active connections",
