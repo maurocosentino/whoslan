@@ -21,6 +21,14 @@ type Strings struct {
 	AppSubtitle 	string
 	MenuItems   	[]MenuItem
 	MenuHelp 		string
+	//Ports
+	ColPort     string
+	ColProtocol string
+	ColProcess  string
+	ColPID      string
+	PortsTitle  string
+	PortsHelp   []HelpItem
+	PortsError  string
 }
 
 var es = Strings{
@@ -29,6 +37,7 @@ var es = Strings{
 	AppSubtitle: "Panel de red y seguridad",
 	MenuItems: []MenuItem{
 		{"d", "Dispositivos", "Ver y gestionar dispositivos conectados"},
+		{"p", "Puertos", "Ver puertos abiertos y procesos"},
 		{"q", "Salir", "Cerrar whoslan"},
 	},
 	MenuHelp: 		 "(↑/↓ para moverte · enter para seleccionar)",
@@ -52,6 +61,18 @@ var es = Strings{
 	RenamePrompt:    "Nuevo nombre: ",
 	RenameHelp:      "(enter para confirmar · esc para cancelar)",
 	ScanError:       "Error escaneando: %v",
+	//ports
+	ColPort:     "Puerto",
+	ColProtocol: "Protocolo",
+	ColProcess:  "Proceso",
+	ColPID:      "PID",
+	PortsTitle:  "whoslan — puertos abiertos",
+	PortsHelp: []HelpItem{
+		{"↑/↓", "moverte"},
+		{"s", "escanear"},
+		{"esc", "volver"},
+	},
+	PortsError: "Error escaneando puertos: %v",
 }
 
 var en = Strings{
@@ -60,6 +81,7 @@ var en = Strings{
 	AppSubtitle: "Network & security panel",
 	MenuItems: []MenuItem{
 		{"d", "Devices", "View and manage connected devices"},
+		{"p", "Ports", "View open ports and processes"},
 		{"q", "Quit", "Exit whoslan"},
 	},
 	MenuHelp: 		 "(↑/↓ to move · enter to select)",
@@ -83,6 +105,18 @@ var en = Strings{
 	RenamePrompt:    "New name: ",
 	RenameHelp:      "(enter to confirm · esc to cancel)",
 	ScanError:       "Scan error: %v",
+	//ports
+	ColPort:     "Port",
+	ColProtocol: "Protocol",
+	ColProcess:  "Process",
+	ColPID:      "PID",
+	PortsTitle:  "whoslan — open ports",
+	PortsHelp: []HelpItem{
+		{"↑/↓", "move"},
+		{"s", "scan"},
+		{"esc", "back"},
+	},
+	PortsError: "Error scanning ports: %v",
 }
 
 // MenuItem representa una opción del menú principal.

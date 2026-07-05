@@ -17,6 +17,7 @@ import (
 	"whoslan/internal/scanner"
 	"whoslan/internal/store"
 	"whoslan/internal/i18n"
+	"whoslan/internal/portscan"
 )
 
 // scanResultMsg es el mensaje que Bubble Tea recibe cuando termina un
@@ -32,6 +33,7 @@ type screen int
 const (
 	screenMenu screen = iota
 	screenDevices
+	screenPorts
 )
 
 type model struct {
@@ -44,6 +46,8 @@ type model struct {
 	t                i18n.Strings
 	screen           screen
 	menuCursor       int
+	ports            []portscan.ListeningPort
+	portsCursor      int
 }
 
 // ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
@@ -122,6 +126,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateMenu(msg)
 	case screenDevices:
 		return m.updateDevices(msg)
+	case screenPorts:
+		return m.updatePorts(msg)
 	}
 	return m, nil
 }
@@ -151,6 +157,10 @@ func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenDevices
 			m.cursor = 0
 			return m, m.doScan()
+		case "p":
+			m.screen = screenPorts
+			m.portsCursor = 0
+			return m, m.doPortScan()
 		case "q":
 			return m, tea.Quit
 		}
@@ -206,6 +216,38 @@ func (m model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "s":
 			return m, m.doScan()
+		}
+	}
+	return m, nil
+}
+
+func (m model) updatePorts(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case portScanResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.ports = msg.ports
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		case "up", "k":
+			if m.portsCursor > 0 {
+				m.portsCursor--
+			}
+		case "down", "j":
+			if m.portsCursor < len(m.ports)-1 {
+				m.portsCursor++
+			}
+		case "s":
+			return m, m.doPortScan()
 		}
 	}
 	return m, nil
@@ -398,11 +440,34 @@ func (m model) viewMenu() string {
 	return b.String()
 }
 
-func (m model) View() string {
-	if m.screen == screenMenu {
-		return m.viewMenu()
+func (m model) viewPorts() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.PortsTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.PortsError, m.err))
 	}
-	return m.viewDevices()
+
+	b.WriteString(m.buildPortsTable())
+	b.WriteString("\n" + buildHelpBar(m.t.PortsHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+func (m model) View() string {
+	switch m.screen {
+	case screenMenu:
+		return m.viewMenu()
+	case screenPorts:
+		return m.viewPorts()
+	default:
+		return m.viewDevices()
+	}
 }
 
 // viewDevices es tu View() original, renombrado.
@@ -472,4 +537,45 @@ func buildHelpBar(items []i18n.HelpItem, dimStyle, keyStyle lipgloss.Style) stri
 		parts = append(parts, keyStyle.Render(item.Key)+dimStyle.Render(" "+item.Action))
 	}
 	return dimStyle.Render("(") + strings.Join(parts, dimStyle.Render(" · ")) + dimStyle.Render(")")
+}
+
+func (m model) buildPortsTable() string {
+	columns := []table.Column{
+		{Title: m.t.ColPort, Width: 8},
+		{Title: m.t.ColProtocol, Width: 10},
+		{Title: m.t.ColProcess, Width: 25},
+		{Title: m.t.ColPID, Width: 8},
+	}
+
+	rows := make([]table.Row, 0, len(m.ports))
+	for _, p := range m.ports {
+		rows = append(rows, table.Row{
+			fmt.Sprintf("%d", p.Port),
+			p.Protocol,
+			p.ProcessName,
+			fmt.Sprintf("%d", p.PID),
+		})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.portsCursor)
+
+	return t.View()
+}
+
+type portScanResultMsg struct {
+	ports []portscan.ListeningPort
+	err   error
+}
+
+func (m model) doPortScan() tea.Cmd {
+	return func() tea.Msg {
+		ports, err := portscan.Scan()
+		return portScanResultMsg{ports: ports, err: err}
+	}
 }
