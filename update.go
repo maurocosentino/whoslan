@@ -4,7 +4,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"whoslan/internal/i18n"
+	"github.com/maurocosentino/whoslan/internal/i18n"
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {

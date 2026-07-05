@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"whoslan/internal/portscan"
-	"whoslan/internal/scanner"
+	"github.com/maurocosentino/whoslan/internal/portscan"
+	"github.com/maurocosentino/whoslan/internal/scanner"
 )
 
 // DeviceRecord es el estado histórico de un dispositivo: cuándo se lo

@@ -8,7 +8,7 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/common-nighthawk/go-figure"
-	"whoslan/internal/portscan"
+	"github.com/maurocosentino/whoslan/internal/portscan"
 	"unicode/utf8"
 )
 

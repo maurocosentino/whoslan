@@ -8,8 +8,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"whoslan/internal/i18n"
-	"whoslan/internal/store"
+	"github.com/maurocosentino/whoslan/internal/i18n"
+	"github.com/maurocosentino/whoslan/internal/store"
 )
 
 // orderedDevices devuelve todos los dispositivos en un único orden:

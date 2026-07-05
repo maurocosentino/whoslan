@@ -4,10 +4,10 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"whoslan/internal/i18n"
-	"whoslan/internal/portscan"
-	"whoslan/internal/scanner"
-	"whoslan/internal/store"
+	"github.com/maurocosentino/whoslan/internal/i18n"
+	"github.com/maurocosentino/whoslan/internal/portscan"
+	"github.com/maurocosentino/whoslan/internal/scanner"
+	"github.com/maurocosentino/whoslan/internal/store"
 )
 
 // scanResultMsg es el mensaje que Bubble Tea recibe cuando termina un

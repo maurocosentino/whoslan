@@ -1,4 +1,4 @@
-module whoslan
+module github.com/maurocosentino/whoslan
 
 go 1.24.4
 

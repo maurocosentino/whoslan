@@ -9,8 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"whoslan/internal/i18n"
-	"whoslan/internal/store"
+	"github.com/maurocosentino/whoslan/internal/i18n"
+	"github.com/maurocosentino/whoslan/internal/store"
 )
 
 // ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
