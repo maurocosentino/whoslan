@@ -8,6 +8,12 @@ import (
 )
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if wsMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		m.width = wsMsg.Width
+		m.height = wsMsg.Height
+		return m, nil
+	}
+
 	if m.renaming {
 		return m.updateRenaming(msg)
 	}

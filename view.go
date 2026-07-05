@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/common-nighthawk/go-figure"
 )
 
 func (m model) View() string {
@@ -24,6 +25,12 @@ func (m model) View() string {
 	}
 }
 
+// asciiTitle genera el título de la app como arte ASCII grande.
+func asciiTitle(text string) string {
+	fig := figure.NewFigure(text, "standard", true)
+	return fig.String()
+}
+
 func (m model) viewMenu() string {
 	var b strings.Builder
 
@@ -32,7 +39,7 @@ func (m model) viewMenu() string {
 	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
 	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 
-	b.WriteString(titleStyle.Render(m.t.AppTitle) + "\n")
+	b.WriteString(titleStyle.Render(asciiTitle(m.t.AppTitle)) + "\n")
 	b.WriteString(subtitleStyle.Render(m.t.AppSubtitle) + "\n\n")
 
 	for i, item := range m.t.MenuItems {
@@ -46,7 +53,12 @@ func (m model) viewMenu() string {
 
 	b.WriteString("\n" + subtitleStyle.Render(m.t.MenuHelp) + "\n")
 
-	return b.String()
+	content := b.String()
+
+	if m.width > 0 && m.height > 0 {
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
+	}
+	return content
 }
 
 func (m model) viewDevices() string {

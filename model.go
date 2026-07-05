@@ -59,6 +59,8 @@ type model struct {
 	connections      []portscan.Connection
 	connCursor       int
 	ifaceInfo        portscan.InterfaceInfo
+	width 			 int
+	height			 int
 }
 
 // doScan ejecuta el escaneo en background y devuelve un tea.Cmd:
