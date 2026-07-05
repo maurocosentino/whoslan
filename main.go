@@ -34,6 +34,7 @@ const (
 	screenMenu screen = iota
 	screenDevices
 	screenPorts
+	screenConnections
 )
 
 type model struct {
@@ -48,6 +49,8 @@ type model struct {
 	menuCursor       int
 	ports            []portscan.ListeningPort
 	portsCursor      int
+	connections    []portscan.Connection
+	connCursor     int
 }
 
 // ensureSudo le pide la contraseña de sudo al usuario de forma interactiva
@@ -128,6 +131,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateDevices(msg)
 	case screenPorts:
 		return m.updatePorts(msg)
+	case screenConnections:
+		return m.updateConnections(msg)
 	}
 	return m, nil
 }
@@ -161,6 +166,10 @@ func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.screen = screenPorts
 			m.portsCursor = 0
 			return m, m.doPortScan()
+		case "c":
+			m.screen = screenConnections
+			m.connCursor = 0
+			return m, m.doConnScan()
 		case "q":
 			return m, tea.Quit
 		}
@@ -248,6 +257,38 @@ func (m model) updatePorts(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "s":
 			return m, m.doPortScan()
+		}
+	}
+	return m, nil
+}
+
+func (m model) updateConnections(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case connScanResultMsg:
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.err = nil
+		m.connections = msg.connections
+		return m, nil
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c":
+			return m, tea.Quit
+		case "esc":
+			m.screen = screenMenu
+			return m, nil
+		case "up", "k":
+			if m.connCursor > 0 {
+				m.connCursor--
+			}
+		case "down", "j":
+			if m.connCursor < len(m.connections)-1 {
+				m.connCursor++
+			}
+		case "s":
+			return m, m.doConnScan()
 		}
 	}
 	return m, nil
@@ -465,6 +506,8 @@ func (m model) View() string {
 		return m.viewMenu()
 	case screenPorts:
 		return m.viewPorts()
+	case screenConnections:
+		return m.viewConnections()
 	default:
 		return m.viewDevices()
 	}
@@ -568,6 +611,50 @@ func (m model) buildPortsTable() string {
 	return t.View()
 }
 
+func (m model) buildConnectionsTable() string {
+	columns := []table.Column{
+		{Title: m.t.ColProtocol, Width: 10},
+		{Title: m.t.ColLocal, Width: 22},
+		{Title: m.t.ColRemote, Width: 22},
+		{Title: m.t.ColConnStatus, Width: 14},
+		{Title: m.t.ColProcess, Width: 20},
+	}
+
+	rows := make([]table.Row, 0, len(m.connections))
+	for _, c := range m.connections {
+		rows = append(rows, table.Row{c.Protocol, c.LocalAddr, c.RemoteAddr, c.Status, c.ProcessName})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.connCursor)
+
+	return t.View()
+}
+
+func (m model) viewConnections() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.ConnTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.ConnError, m.err))
+	}
+
+	b.WriteString(m.buildConnectionsTable())
+	b.WriteString("\n" + buildHelpBar(m.t.ConnHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
 type portScanResultMsg struct {
 	ports []portscan.ListeningPort
 	err   error
@@ -577,5 +664,17 @@ func (m model) doPortScan() tea.Cmd {
 	return func() tea.Msg {
 		ports, err := portscan.Scan()
 		return portScanResultMsg{ports: ports, err: err}
+	}
+}
+
+type connScanResultMsg struct {
+	connections []portscan.Connection
+	err         error
+}
+
+func (m model) doConnScan() tea.Cmd {
+	return func() tea.Msg {
+		conns, err := portscan.ScanConnections()
+		return connScanResultMsg{connections: conns, err: err}
 	}
 }

@@ -15,6 +15,60 @@ type ListeningPort struct {
 	PID         int32
 }
 
+// Connection representa una conexión de red activa (no solo LISTEN).
+type Connection struct {
+	Protocol    string
+	LocalAddr   string
+	RemoteAddr  string
+	Status      string
+	ProcessName string
+	PID         int32
+}
+
+// ScanConnections devuelve las conexiones activas que no están en modo
+// LISTEN (es decir, conexiones reales hacia/desde otra IP:puerto).
+func ScanConnections() ([]Connection, error) {
+	conns, err := psnet.Connections("inet")
+	if err != nil {
+		return nil, err
+	}
+
+	var result []Connection
+	for _, c := range conns {
+		if c.Status == "LISTEN" || c.Status == "NONE" {
+			continue
+		}
+		if c.Raddr.IP == "" {
+			continue // sin dirección remota, no es una conexión real
+		}
+
+		name := "?"
+		if c.Pid > 0 {
+			if p, err := process.NewProcess(c.Pid); err == nil {
+				if n, err := p.Name(); err == nil {
+					name = n
+				}
+			}
+		}
+
+		protocol := "tcp"
+		if c.Type == 2 {
+			protocol = "udp"
+		}
+
+		result = append(result, Connection{
+			Protocol:    protocol,
+			LocalAddr:   fmt.Sprintf("%s:%d", c.Laddr.IP, c.Laddr.Port),
+			RemoteAddr:  fmt.Sprintf("%s:%d", c.Raddr.IP, c.Raddr.Port),
+			Status:      c.Status,
+			ProcessName: name,
+			PID:         c.Pid,
+		})
+	}
+
+	return result, nil
+}
+
 // Scan devuelve todos los puertos en LISTEN, con el proceso dueño si se
 // puede resolver (puede requerir permisos para algunos procesos ajenos).
 func Scan() ([]ListeningPort, error) {

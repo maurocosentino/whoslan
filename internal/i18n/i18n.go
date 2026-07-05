@@ -29,6 +29,13 @@ type Strings struct {
 	PortsTitle  string
 	PortsHelp   []HelpItem
 	PortsError  string
+
+	ColLocal      string
+	ColRemote     string
+	ColConnStatus string
+	ConnTitle     string
+	ConnHelp      []HelpItem
+	ConnError     string
 }
 
 var es = Strings{
@@ -38,6 +45,7 @@ var es = Strings{
 	MenuItems: []MenuItem{
 		{"d", "Dispositivos", "Ver y gestionar dispositivos conectados"},
 		{"p", "Puertos", "Ver puertos abiertos y procesos"},
+		{"c", "Conexiones", "Ver conexiones de red activas"},
 		{"q", "Salir", "Cerrar whoslan"},
 	},
 	MenuHelp: 		 "(↑/↓ para moverte · enter para seleccionar)",
@@ -73,6 +81,16 @@ var es = Strings{
 		{"esc", "volver"},
 	},
 	PortsError: "Error escaneando puertos: %v",
+	ColLocal:      "Local",
+	ColRemote:     "Remoto",
+	ColConnStatus: "Estado",
+	ConnTitle:     "whoslan — conexiones activas",
+	ConnHelp: []HelpItem{
+		{"↑/↓", "moverte"},
+		{"s", "escanear"},
+		{"esc", "volver"},
+	},
+	ConnError: "Error escaneando conexiones: %v",
 }
 
 var en = Strings{
@@ -82,6 +100,7 @@ var en = Strings{
 	MenuItems: []MenuItem{
 		{"d", "Devices", "View and manage connected devices"},
 		{"p", "Ports", "View open ports and processes"},
+		{"c", "Connections", "View active network connections"},
 		{"q", "Quit", "Exit whoslan"},
 	},
 	MenuHelp: 		 "(↑/↓ to move · enter to select)",
@@ -117,6 +136,16 @@ var en = Strings{
 		{"esc", "back"},
 	},
 	PortsError: "Error scanning ports: %v",
+	ColLocal:      "Local",
+	ColRemote:     "Remote",
+	ColConnStatus: "Status",
+	ConnTitle:     "whoslan — active connections",
+	ConnHelp: []HelpItem{
+		{"↑/↓", "move"},
+		{"s", "scan"},
+		{"esc", "back"},
+	},
+	ConnError: "Error scanning connections: %v",
 }
 
 // MenuItem representa una opción del menú principal.
