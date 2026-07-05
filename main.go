@@ -141,7 +141,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// updateMenu maneja la navegación del menú principal.
 func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	keyMsg, ok := msg.(tea.KeyMsg)
 	if !ok {
@@ -149,37 +148,55 @@ func (m model) updateMenu(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch keyMsg.String() {
-	case "ctrl+c", "q":
+	case "ctrl+c":
 		return m, tea.Quit
 	case "up", "k":
 		if m.menuCursor > 0 {
 			m.menuCursor--
 		}
+		return m, nil
 	case "down", "j":
 		if m.menuCursor < len(m.t.MenuItems)-1 {
 			m.menuCursor++
 		}
+		return m, nil
 	case "enter":
-		selected := m.t.MenuItems[m.menuCursor].Key
-		switch selected {
-		case "d":
-			m.screen = screenDevices
-			m.cursor = 0
-			return m, m.doScan()
-		case "p":
-			m.screen = screenPorts
-			m.portsCursor = 0
-			return m, m.doPortScan()
-		case "c":
-			m.screen = screenConnections
-			m.connCursor = 0
-			return m, m.doConnScan()
-		case "i":
-			m.screen = screenInterface
-			return m, m.doGetInterfaceInfo()
-		case "q":
-			return m, tea.Quit
+		return m.selectMenuItem(m.t.MenuItems[m.menuCursor].Key)
+	}
+
+	// Atajo directo: si la tecla coincide con el Key de algún item
+	// del menú, lo seleccionamos sin necesidad de navegar primero.
+	for i, item := range m.t.MenuItems {
+		if item.Key == keyMsg.String() {
+			m.menuCursor = i
+			return m.selectMenuItem(item.Key)
 		}
+	}
+
+	return m, nil
+}
+
+// selectMenuItem centraliza qué pasa al confirmar una opción del menú,
+// sea por Enter (con el cursor ya posicionado) o por atajo directo de letra.
+func (m model) selectMenuItem(key string) (tea.Model, tea.Cmd) {
+	switch key {
+	case "d":
+		m.screen = screenDevices
+		m.cursor = 0
+		return m, m.doScan()
+	case "p":
+		m.screen = screenPorts
+		m.portsCursor = 0
+		return m, m.doPortScan()
+	case "c":
+		m.screen = screenConnections
+		m.connCursor = 0
+		return m, m.doConnScan()
+	case "i":
+		m.screen = screenInterface
+		return m, m.doGetInterfaceInfo()
+	case "q":
+		return m, tea.Quit
 	}
 	return m, nil
 }
