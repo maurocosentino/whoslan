@@ -1,12 +1,12 @@
 package portscan
 
 import (
+	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"strings"
-	"fmt"
-	"net/http"
-	"io"
 	"time"
 
 	psnet "github.com/shirou/gopsutil/v3/net"
@@ -33,11 +33,11 @@ type Connection struct {
 
 // InterfaceInfo agrupa los datos de configuración de red local.
 type InterfaceInfo struct {
-	Name      string
-	LocalIP   string
-	Netmask   string
-	Gateway   string
-	PublicIP  string
+	Name     string
+	LocalIP  string
+	Netmask  string
+	Gateway  string
+	PublicIP string
 }
 
 // GetInterfaceInfo arma un resumen de la configuración de red usando la

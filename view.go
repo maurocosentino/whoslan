@@ -1,0 +1,258 @@
+package main
+
+import (
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/charmbracelet/bubbles/table"
+	"github.com/charmbracelet/lipgloss"
+)
+
+func (m model) View() string {
+	switch m.screen {
+	case screenMenu:
+		return m.viewMenu()
+	case screenPorts:
+		return m.viewPorts()
+	case screenConnections:
+		return m.viewConnections()
+	case screenInterface:
+		return m.viewInterface()
+	default:
+		return m.viewDevices()
+	}
+}
+
+func (m model) viewMenu() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	subtitleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	selectedStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	descStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.AppTitle) + "\n")
+	b.WriteString(subtitleStyle.Render(m.t.AppSubtitle) + "\n\n")
+
+	for i, item := range m.t.MenuItems {
+		line := fmt.Sprintf("[%s] %-15s %s", item.Key, item.Label, item.Description)
+		if i == m.menuCursor {
+			b.WriteString(selectedStyle.Render("→ "+line) + "\n")
+		} else {
+			b.WriteString("  " + descStyle.Render(line) + "\n")
+		}
+	}
+
+	b.WriteString("\n" + subtitleStyle.Render(m.t.MenuHelp) + "\n")
+
+	return b.String()
+}
+
+func (m model) viewDevices() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.Title) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.ScanError, m.err))
+	}
+
+	if m.renaming {
+		b.WriteString(m.t.RenamePrompt + m.renameInput.View() + "\n")
+		b.WriteString("\n" + dimStyle.Render(m.t.RenameHelp) + "\n")
+		return b.String()
+	}
+
+	b.WriteString(m.buildTable())
+	b.WriteString("\n" + buildHelpBar(m.t.HelpItems, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+func (m model) buildTable() string {
+	now := time.Now()
+	devices := m.currentList()
+
+	names := make([]string, len(devices))
+	ips := make([]string, len(devices))
+	macs := make([]string, len(devices))
+	statuses := make([]string, len(devices))
+	durations := make([]string, len(devices))
+
+	rows := make([]table.Row, 0, len(devices))
+
+	for i, d := range devices {
+		name := displayName(d)
+
+		alert := " "
+		if isNewDevice(d) {
+			alert = "!"
+		}
+
+		status := m.t.StatusOnline
+		duration := fmt.Sprintf(m.t.ConnectedFor, formatDuration(now.Sub(d.FirstSeen)))
+		if !d.Online {
+			status = m.t.StatusOffline
+			duration = formatSince(d.LastSeen, m.t.ConnectedFor)
+		}
+		names[i] = name
+		ips[i] = d.IP
+		macs[i] = d.MAC
+		statuses[i] = status
+		durations[i] = duration
+
+		rows = append(rows, table.Row{alert, name, d.IP, d.MAC, status, duration})
+	}
+
+	columns := []table.Column{
+		{Title: m.t.ColAlert, Width: 1},
+		{Title: m.t.ColName, Width: columnWidth(m.t.ColName, names, 10, 40)},
+		{Title: m.t.ColIP, Width: columnWidth(m.t.ColIP, ips, 10, 15)},
+		{Title: m.t.ColMAC, Width: columnWidth(m.t.ColMAC, macs, 10, 17)},
+		{Title: m.t.ColStatus, Width: columnWidth(m.t.ColStatus, statuses, 6, 10)},
+		{Title: m.t.ColDuration, Width: columnWidth(m.t.ColDuration, durations, 8, 20)},
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.cursor)
+
+	rendered := t.View()
+	return dimOfflineRows(rendered, devices, m.cursor)
+}
+
+func (m model) viewPorts() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.PortsTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.PortsError, m.err))
+	}
+
+	b.WriteString(m.buildPortsTable())
+	b.WriteString("\n" + buildHelpBar(m.t.PortsHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+func (m model) buildPortsTable() string {
+	columns := []table.Column{
+		{Title: m.t.ColPort, Width: 8},
+		{Title: m.t.ColProtocol, Width: 10},
+		{Title: m.t.ColProcess, Width: 25},
+		{Title: m.t.ColPID, Width: 8},
+	}
+
+	rows := make([]table.Row, 0, len(m.ports))
+	for _, p := range m.ports {
+		rows = append(rows, table.Row{
+			fmt.Sprintf("%d", p.Port),
+			p.Protocol,
+			p.ProcessName,
+			fmt.Sprintf("%d", p.PID),
+		})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.portsCursor)
+
+	return t.View()
+}
+
+func (m model) viewConnections() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.ConnTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.ConnError, m.err))
+	}
+
+	b.WriteString(m.buildConnectionsTable())
+	b.WriteString("\n" + buildHelpBar(m.t.ConnHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}
+
+func (m model) buildConnectionsTable() string {
+	columns := []table.Column{
+		{Title: m.t.ColProtocol, Width: 10},
+		{Title: m.t.ColLocal, Width: 22},
+		{Title: m.t.ColRemote, Width: 22},
+		{Title: m.t.ColConnStatus, Width: 14},
+		{Title: m.t.ColProcess, Width: 20},
+	}
+
+	rows := make([]table.Row, 0, len(m.connections))
+	for _, c := range m.connections {
+		rows = append(rows, table.Row{c.Protocol, c.LocalAddr, c.RemoteAddr, c.Status, c.ProcessName})
+	}
+
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithFocused(true),
+		table.WithHeight(len(rows)+1),
+	)
+	t.SetCursor(m.connCursor)
+
+	return t.View()
+}
+
+func (m model) viewInterface() string {
+	var b strings.Builder
+
+	titleStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
+	labelStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("42"))
+	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	keyStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+
+	b.WriteString(titleStyle.Render(m.t.InterfaceTitle) + "\n\n")
+
+	if m.err != nil {
+		b.WriteString(fmt.Sprintf(m.t.InterfaceError, m.err) + "\n\n")
+	}
+
+	na := m.t.NotAvailable
+	fields := []struct {
+		label string
+		value string
+	}{
+		{m.t.LabelInterface, orDefault(m.ifaceInfo.Name, na)},
+		{m.t.LabelLocalIP, orDefault(m.ifaceInfo.LocalIP, na)},
+		{m.t.LabelNetmask, orDefault(m.ifaceInfo.Netmask, na)},
+		{m.t.LabelGateway, orDefault(m.ifaceInfo.Gateway, na)},
+		{m.t.LabelPublicIP, orDefault(m.ifaceInfo.PublicIP, na)},
+	}
+
+	for _, f := range fields {
+		b.WriteString(fmt.Sprintf("%s%-14s%s\n", labelStyle.Render(""), f.label+":", f.value))
+	}
+
+	b.WriteString("\n" + buildHelpBar(m.t.InterfaceHelp, dimStyle, keyStyle) + "\n")
+
+	return b.String()
+}

@@ -12,18 +12,19 @@ import (
 // DeviceRecord es el estado histórico de un dispositivo: cuándo se lo
 // vio por primera y última vez, y si está online en este momento.
 type DeviceRecord struct {
-	IP            string    `json:"ip"`
-	MAC           string    `json:"mac"`
-	Vendor        string    `json:"vendor"`
-	Name          string    `json:"name"`
-	FirstSeen     time.Time `json:"first_seen"`
-	LastSeen      time.Time `json:"last_seen"`
-	Online        bool      `json:"online"`
-	Acknowledged  bool      `json:"acknowledged"`
-	MissedScans   int       `json:"missed_scans"`
+	IP           string    `json:"ip"`
+	MAC          string    `json:"mac"`
+	Vendor       string    `json:"vendor"`
+	Name         string    `json:"name"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	Online       bool      `json:"online"`
+	Acknowledged bool      `json:"acknowledged"`
+	MissedScans  int       `json:"missed_scans"`
 }
 
 const maxMissedScans = 3
+
 // Store mantiene el historial de dispositivos, indexado por MAC
 // (a diferencia de la IP, la MAC no cambia por DHCP).
 type Store struct {

@@ -17,10 +17,10 @@ type Strings struct {
 	RenamePrompt    string
 	RenameHelp      string
 	ScanError       string
-	AppTitle    	string
-	AppSubtitle 	string
-	MenuItems   	[]MenuItem
-	MenuHelp 		string
+	AppTitle        string
+	AppSubtitle     string
+	MenuItems       []MenuItem
+	MenuHelp        string
 	//Ports
 	ColPort     string
 	ColProtocol string
@@ -37,19 +37,19 @@ type Strings struct {
 	ConnHelp      []HelpItem
 	ConnError     string
 
-	InterfaceTitle    string
-	LabelInterface    string
-	LabelLocalIP      string
-	LabelNetmask      string
-	LabelGateway      string
-	LabelPublicIP     string
-	InterfaceHelp     []HelpItem
-	InterfaceError    string
-	NotAvailable      string
+	InterfaceTitle string
+	LabelInterface string
+	LabelLocalIP   string
+	LabelNetmask   string
+	LabelGateway   string
+	LabelPublicIP  string
+	InterfaceHelp  []HelpItem
+	InterfaceError string
+	NotAvailable   string
 }
 
 var es = Strings{
-	Title: 			 "whoslan — dispositivos",
+	Title:       "whoslan — dispositivos",
 	AppTitle:    "whoslan",
 	AppSubtitle: "Panel de red y seguridad",
 	MenuItems: []MenuItem{
@@ -60,13 +60,13 @@ var es = Strings{
 		{"l", "Idioma", "Cambiar entre español e inglés"},
 		{"q", "Salir", "Cerrar whoslan"},
 	},
-	MenuHelp: 		 "(↑/↓ para moverte · enter para seleccionar)",
+	MenuHelp:        "(↑/↓ para moverte · enter para seleccionar)",
 	ColName:         "Nombre",
 	ColIP:           "IP",
 	ColMAC:          "MAC",
 	ColStatus:       "Estado",
 	ColDuration:     "Duración",
-	ColAlert: 		 "",
+	ColAlert:        "",
 	StatusOnline:    "Online",
 	StatusOffline:   "Offline",
 	ConnectedFor:    "hace %s",
@@ -78,9 +78,9 @@ var es = Strings{
 		{"r", "renombrar"},
 		{"esc", "volver"},
 	},
-	RenamePrompt:    "Nuevo nombre: ",
-	RenameHelp:      "(enter para confirmar · esc para cancelar)",
-	ScanError:       "Error escaneando: %v",
+	RenamePrompt: "Nuevo nombre: ",
+	RenameHelp:   "(enter para confirmar · esc para cancelar)",
+	ScanError:    "Error escaneando: %v",
 	//ports
 	ColPort:     "Puerto",
 	ColProtocol: "Protocolo",
@@ -92,7 +92,7 @@ var es = Strings{
 		{"s", "escanear"},
 		{"esc", "volver"},
 	},
-	PortsError: "Error escaneando puertos: %v",
+	PortsError:    "Error escaneando puertos: %v",
 	ColLocal:      "Local",
 	ColRemote:     "Remoto",
 	ColConnStatus: "Estado",
@@ -102,7 +102,7 @@ var es = Strings{
 		{"s", "escanear"},
 		{"esc", "volver"},
 	},
-	ConnError: "Error escaneando conexiones: %v",
+	ConnError:      "Error escaneando conexiones: %v",
 	InterfaceTitle: "whoslan — interfaz de red",
 	LabelInterface: "Interfaz",
 	LabelLocalIP:   "IP local",
@@ -118,7 +118,7 @@ var es = Strings{
 }
 
 var en = Strings{
-	Title: 			 "whoslan — devices",
+	Title:       "whoslan — devices",
 	AppTitle:    "whoslan",
 	AppSubtitle: "Network & security panel",
 	MenuItems: []MenuItem{
@@ -129,13 +129,13 @@ var en = Strings{
 		{"l", "Language", "Switch between English and Spanish"},
 		{"q", "Quit", "Exit whoslan"},
 	},
-	MenuHelp: 		 "(↑/↓ to move · enter to select)",
+	MenuHelp:        "(↑/↓ to move · enter to select)",
 	ColName:         "Name",
 	ColIP:           "IP",
 	ColMAC:          "MAC",
 	ColStatus:       "Status",
 	ColDuration:     "Duration",
-	ColAlert: 		 "",
+	ColAlert:        "",
 	StatusOnline:    "Online",
 	StatusOffline:   "Offline",
 	ConnectedFor:    "%s ago",
@@ -147,9 +147,9 @@ var en = Strings{
 		{"r", "rename"},
 		{"esc", "back"},
 	},
-	RenamePrompt:    "New name: ",
-	RenameHelp:      "(enter to confirm · esc to cancel)",
-	ScanError:       "Scan error: %v",
+	RenamePrompt: "New name: ",
+	RenameHelp:   "(enter to confirm · esc to cancel)",
+	ScanError:    "Scan error: %v",
 	//ports
 	ColPort:     "Port",
 	ColProtocol: "Protocol",
@@ -161,7 +161,7 @@ var en = Strings{
 		{"s", "scan"},
 		{"esc", "back"},
 	},
-	PortsError: "Error scanning ports: %v",
+	PortsError:    "Error scanning ports: %v",
 	ColLocal:      "Local",
 	ColRemote:     "Remote",
 	ColConnStatus: "Status",
@@ -171,7 +171,7 @@ var en = Strings{
 		{"s", "scan"},
 		{"esc", "back"},
 	},
-	ConnError: "Error scanning connections: %v",
+	ConnError:      "Error scanning connections: %v",
 	InterfaceTitle: "whoslan — network interface",
 	LabelInterface: "Interface",
 	LabelLocalIP:   "Local IP",
