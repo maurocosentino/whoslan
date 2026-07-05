@@ -2,10 +2,12 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"whoslan/internal/portscan"
 	"whoslan/internal/scanner"
 )
 
@@ -23,38 +25,53 @@ type DeviceRecord struct {
 	MissedScans  int       `json:"missed_scans"`
 }
 
+// PortRecord es el estado histórico de un puerto en LISTEN: cuándo se
+// vio por primera y última vez, y si el usuario ya lo reconoció.
+type PortRecord struct {
+	Port         uint32    `json:"port"`
+	Protocol     string    `json:"protocol"`
+	ProcessName  string    `json:"process_name"`
+	FirstSeen    time.Time `json:"first_seen"`
+	LastSeen     time.Time `json:"last_seen"`
+	Acknowledged bool      `json:"acknowledged"`
+}
+
 const maxMissedScans = 3
 
 // Store mantiene el historial de dispositivos, indexado por MAC
 // (a diferencia de la IP, la MAC no cambia por DHCP).
 type Store struct {
-	path    string
-	Devices map[string]*DeviceRecord
+	path      string
+	portsPath string
+	Devices   map[string]*DeviceRecord
+	Ports     map[string]*PortRecord 
 }
 
 // Load abre (o crea si no existe) el archivo de historial en disco.
 func Load() (*Store, error) {
-	path, err := storePath()
+	path, err := storePath("history.json")
+	if err != nil {
+		return nil, err
+	}
+	portsPath, err := storePath("ports_history.json")
 	if err != nil {
 		return nil, err
 	}
 
 	s := &Store{
-		path:    path,
-		Devices: make(map[string]*DeviceRecord),
+		path:      path,
+		portsPath: portsPath,
+		Devices:   make(map[string]*DeviceRecord),
+		Ports:     make(map[string]*PortRecord),
 	}
 
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return s, nil // primera vez que corre, historial vacío
+	if data, err := os.ReadFile(path); err == nil {
+		json.Unmarshal(data, &s.Devices)
 	}
-	if err != nil {
-		return nil, err
+	if data, err := os.ReadFile(portsPath); err == nil {
+		json.Unmarshal(data, &s.Ports)
 	}
-
-	if err := json.Unmarshal(data, &s.Devices); err != nil {
-		return nil, err
-	}
+	
 	return s, nil
 }
 
@@ -106,7 +123,46 @@ func (s *Store) ApplyScan(found []scanner.Device) {
 	}
 }
 
-func storePath() (string, error) {
+
+func (s *Store) SavePorts() error {
+	data, err := json.MarshalIndent(s.Ports, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.portsPath, data, 0644)
+}
+
+// ApplyPortScan actualiza el historial de puertos con los resultados de
+// un escaneo nuevo, marcando como no reconocidos los que nunca se vieron.
+func (s *Store) ApplyPortScan(found []portscan.ListeningPort) {
+	now := time.Now()
+
+	for _, p := range found {
+		key := fmt.Sprintf("%s:%d", p.Protocol, p.Port)
+		record, exists := s.Ports[key]
+
+		if !exists {
+			s.Ports[key] = &PortRecord{
+				Port: p.Port, Protocol: p.Protocol, ProcessName: p.ProcessName,
+				FirstSeen: now, LastSeen: now, Acknowledged: false,
+			}
+			continue
+		}
+
+		record.LastSeen = now
+		record.ProcessName = p.ProcessName // el proceso dueño puede cambiar
+	}
+}
+
+// AcknowledgePort marca un puerto como reconocido por el usuario.
+func (s *Store) AcknowledgePort(protocol string, port uint32) {
+	key := fmt.Sprintf("%s:%d", protocol, port)
+	if record, exists := s.Ports[key]; exists {
+		record.Acknowledged = true
+	}
+}
+
+func storePath(filename string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -115,7 +171,7 @@ func storePath() (string, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "history.json"), nil
+	return filepath.Join(dir, filename), nil
 }
 
 // Acknowledge marca un dispositivo como reconocido, sacándole la alerta

@@ -169,6 +169,7 @@ func (m model) viewPorts() string {
 
 func (m model) buildPortsTable() string {
 	columns := []table.Column{
+		{Title: m.t.ColAlert, Width: 1},
 		{Title: m.t.ColPort, Width: 8},
 		{Title: m.t.ColProtocol, Width: 10},
 		{Title: m.t.ColProcess, Width: 25},
@@ -177,7 +178,14 @@ func (m model) buildPortsTable() string {
 
 	rows := make([]table.Row, 0, len(m.ports))
 	for _, p := range m.ports {
+		alert := " "
+		key := fmt.Sprintf("%s:%d", p.Protocol, p.Port)
+		if record, exists := m.store.Ports[key]; exists && !record.Acknowledged {
+			alert = "!"
+		}
+
 		rows = append(rows, table.Row{
+			alert,
 			fmt.Sprintf("%d", p.Port),
 			p.Protocol,
 			p.ProcessName,

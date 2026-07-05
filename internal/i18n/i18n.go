@@ -90,6 +90,7 @@ var es = Strings{
 	PortsHelp: []HelpItem{
 		{"↑/↓", "moverte"},
 		{"s", "escanear"},
+		{"a", "reconocer"},
 		{"esc", "volver"},
 	},
 	PortsError:    "Error escaneando puertos: %v",
@@ -159,6 +160,7 @@ var en = Strings{
 	PortsHelp: []HelpItem{
 		{"↑/↓", "move"},
 		{"s", "scan"},
+		{"a", "acknowledge"},
 		{"esc", "back"},
 	},
 	PortsError:    "Error scanning ports: %v",

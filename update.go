@@ -162,8 +162,10 @@ func (m model) updatePorts(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = nil
+		m.store.ApplyPortScan(msg.ports)
+		m.store.SavePorts()
 		m.ports = msg.ports
-		return m, nil
+	return m, nil
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -171,6 +173,12 @@ func (m model) updatePorts(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.screen = screenMenu
 			return m, nil
+			case "a":
+	if m.portsCursor < len(m.ports) {
+		p := m.ports[m.portsCursor]
+		m.store.AcknowledgePort(p.Protocol, p.Port)
+		m.store.SavePorts()
+	}
 		case "up", "k":
 			if m.portsCursor > 0 {
 				m.portsCursor--
