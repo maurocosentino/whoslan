@@ -54,7 +54,13 @@ func (m model) viewMenu() string {
 	b.WriteString("\n" + subtitleStyle.Render(m.t.MenuHelp) + "\n")
 
 	content := b.String()
+	return m.centered(content)
+}
 
+// centered envuelve el contenido para que aparezca centrado en la
+// terminal, usando el tamaño real reportado por Bubble Tea. Si todavía
+// no lo conocemos (arranque muy temprano), devuelve el contenido tal cual.
+func (m model) centered(content string) string {
 	if m.width > 0 && m.height > 0 {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, content)
 	}
@@ -77,13 +83,13 @@ func (m model) viewDevices() string {
 	if m.renaming {
 		b.WriteString(m.t.RenamePrompt + m.renameInput.View() + "\n")
 		b.WriteString("\n" + dimStyle.Render(m.t.RenameHelp) + "\n")
-		return b.String()
+		return m.centered(b.String())
 	}
 
 	b.WriteString(m.buildTable())
 	b.WriteString("\n" + buildHelpBar(m.t.HelpItems, dimStyle, keyStyle) + "\n")
 
-	return b.String()
+	return m.centered(b.String())
 }
 
 func (m model) buildTable() string {
@@ -158,7 +164,7 @@ func (m model) viewPorts() string {
 	b.WriteString(m.buildPortsTable())
 	b.WriteString("\n" + buildHelpBar(m.t.PortsHelp, dimStyle, keyStyle) + "\n")
 
-	return b.String()
+	return m.centered(b.String())
 }
 
 func (m model) buildPortsTable() string {
@@ -206,7 +212,7 @@ func (m model) viewConnections() string {
 	b.WriteString(m.buildConnectionsTable())
 	b.WriteString("\n" + buildHelpBar(m.t.ConnHelp, dimStyle, keyStyle) + "\n")
 
-	return b.String()
+	return m.centered(b.String())
 }
 
 func (m model) buildConnectionsTable() string {
@@ -266,5 +272,5 @@ func (m model) viewInterface() string {
 
 	b.WriteString("\n" + buildHelpBar(m.t.InterfaceHelp, dimStyle, keyStyle) + "\n")
 
-	return b.String()
+	return m.centered(b.String())
 }
