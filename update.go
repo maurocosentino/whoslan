@@ -132,7 +132,7 @@ func (m model) updateDevices(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "a":
 			devices := m.currentList()
 			if m.cursor < len(devices) {
-				m.store.Acknowledge(devices[m.cursor].MAC)
+				m.store.ToggleAcknowledge(devices[m.cursor].MAC)
 				m.store.Save()
 			}
 		case "r":
@@ -173,12 +173,12 @@ func (m model) updatePorts(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "esc":
 			m.screen = screenMenu
 			return m, nil
-			case "a":
-	if m.portsCursor < len(m.ports) {
-		p := m.ports[m.portsCursor]
-		m.store.AcknowledgePort(p.Protocol, p.Port)
-		m.store.SavePorts()
-	}
+	case "a":
+		if m.portsCursor < len(m.ports) {
+			p := m.ports[m.portsCursor]
+			m.store.TogglePortAcknowledge(p.Protocol, p.Port)
+			m.store.SavePorts()
+		}
 		case "up", "k":
 			if m.portsCursor > 0 {
 				m.portsCursor--

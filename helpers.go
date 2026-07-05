@@ -137,3 +137,29 @@ func buildHelpBar(items []i18n.HelpItem, dimStyle, keyStyle lipgloss.Style) stri
 	}
 	return dimStyle.Render("(") + strings.Join(parts, dimStyle.Render(" · ")) + dimStyle.Render(")")
 }
+
+// highlightAlertColumn recorre el texto ya renderizado por la tabla y
+// pinta de color el símbolo "!" en la primera columna, salvo en la fila
+// actualmente seleccionada (que ya tiene su propio resaltado de cursor,
+// y mezclar los dos estilos rompe el color de la selección).
+func highlightAlertColumn(rendered string, alerts []bool, cursor int) string {
+	lines := strings.Split(rendered, "\n")
+
+	for i, isAlert := range alerts {
+		if !isAlert || i == cursor {
+			continue
+		}
+		lineIdx := i + 1
+		if lineIdx >= len(lines) {
+			continue
+		}
+		line := lines[lineIdx]
+		idx := strings.Index(line, "!")
+		if idx == -1 {
+			continue
+		}
+		lines[lineIdx] = line[:idx] + alertStyle.Render("!") + line[idx+1:]
+	}
+
+	return strings.Join(lines, "\n")
+}

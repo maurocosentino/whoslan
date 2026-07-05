@@ -71,7 +71,7 @@ func Load() (*Store, error) {
 	if data, err := os.ReadFile(portsPath); err == nil {
 		json.Unmarshal(data, &s.Ports)
 	}
-	
+
 	return s, nil
 }
 
@@ -154,11 +154,11 @@ func (s *Store) ApplyPortScan(found []portscan.ListeningPort) {
 	}
 }
 
-// AcknowledgePort marca un puerto como reconocido por el usuario.
-func (s *Store) AcknowledgePort(protocol string, port uint32) {
+// TogglePortAcknowledge alterna el estado de reconocimiento de un puerto.
+func (s *Store) TogglePortAcknowledge(protocol string, port uint32) {
 	key := fmt.Sprintf("%s:%d", protocol, port)
 	if record, exists := s.Ports[key]; exists {
-		record.Acknowledged = true
+		record.Acknowledged = !record.Acknowledged
 	}
 }
 
@@ -174,11 +174,11 @@ func storePath(filename string) (string, error) {
 	return filepath.Join(dir, filename), nil
 }
 
-// Acknowledge marca un dispositivo como reconocido, sacándole la alerta
-// de "nuevo" para siempre (hasta que se le haga reset manual, si hiciera falta).
-func (s *Store) Acknowledge(mac string) {
+// ToggleAcknowledge alterna el estado de reconocimiento de un dispositivo:
+// si estaba reconocido, vuelve a marcarlo como pendiente de revisar, y viceversa.
+func (s *Store) ToggleAcknowledge(mac string) {
 	if record, exists := s.Devices[mac]; exists {
-		record.Acknowledged = true
+		record.Acknowledged = !record.Acknowledged
 	}
 }
 

@@ -25,6 +25,10 @@ func (m model) View() string {
 	}
 }
 
+// alertStyle es el estilo compartido para el símbolo de alerta "!"
+// que indica un dispositivo o puerto nuevo sin reconocer.
+var alertStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("214"))
+
 // asciiTitle genera el título de la app como arte ASCII grande.
 func asciiTitle(text string) string {
 	fig := figure.NewFigure(text, "standard", true)
@@ -101,6 +105,7 @@ func (m model) buildTable() string {
 	macs := make([]string, len(devices))
 	statuses := make([]string, len(devices))
 	durations := make([]string, len(devices))
+	alerts := make([]bool, len(devices))
 
 	rows := make([]table.Row, 0, len(devices))
 
@@ -110,6 +115,7 @@ func (m model) buildTable() string {
 		alert := " "
 		if isNewDevice(d) {
 			alert = "!"
+			alerts[i] = true
 		}
 
 		status := m.t.StatusOnline
@@ -145,6 +151,7 @@ func (m model) buildTable() string {
 	t.SetCursor(m.cursor)
 
 	rendered := t.View()
+	rendered = highlightAlertColumn(rendered, alerts, m.cursor)
 	return dimOfflineRows(rendered, devices, m.cursor)
 }
 
@@ -177,11 +184,14 @@ func (m model) buildPortsTable() string {
 	}
 
 	rows := make([]table.Row, 0, len(m.ports))
-	for _, p := range m.ports {
+	alerts := make([]bool, len(m.ports))
+
+	for i, p := range m.ports {
 		alert := " "
 		key := fmt.Sprintf("%s:%d", p.Protocol, p.Port)
 		if record, exists := m.store.Ports[key]; exists && !record.Acknowledged {
 			alert = "!"
+			alerts[i] = true
 		}
 
 		rows = append(rows, table.Row{
@@ -200,8 +210,7 @@ func (m model) buildPortsTable() string {
 		table.WithHeight(len(rows)+1),
 	)
 	t.SetCursor(m.portsCursor)
-
-	return t.View()
+	return highlightAlertColumn(t.View(), alerts, m.portsCursor)
 }
 
 func (m model) viewConnections() string {

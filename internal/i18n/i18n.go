@@ -74,7 +74,7 @@ var es = Strings{
 	HelpItems: []HelpItem{
 		{"↑/↓", "moverte"},
 		{"s", "escanear"},
-		{"a", "reconocer"},
+		{"a", "marcar/desmarcar"},
 		{"r", "renombrar"},
 		{"esc", "volver"},
 	},
@@ -90,7 +90,7 @@ var es = Strings{
 	PortsHelp: []HelpItem{
 		{"↑/↓", "moverte"},
 		{"s", "escanear"},
-		{"a", "reconocer"},
+		{"a", "marcar/desmarcar"},
 		{"esc", "volver"},
 	},
 	PortsError:    "Error escaneando puertos: %v",
@@ -144,7 +144,7 @@ var en = Strings{
 	HelpItems: []HelpItem{
 		{"↑/↓", "move"},
 		{"s", "scan"},
-		{"a", "acknowledge"},
+		{"a", "toggle flag"},
 		{"r", "rename"},
 		{"esc", "back"},
 	},
@@ -160,7 +160,7 @@ var en = Strings{
 	PortsHelp: []HelpItem{
 		{"↑/↓", "move"},
 		{"s", "scan"},
-		{"a", "acknowledge"},
+		{"a", "toggle flag"},
 		{"esc", "back"},
 	},
 	PortsError:    "Error scanning ports: %v",
