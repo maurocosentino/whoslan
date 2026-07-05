@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/common-nighthawk/go-figure"
 	"whoslan/internal/portscan"
+	"unicode/utf8"
 )
 
 func (m model) View() string {
@@ -307,8 +308,35 @@ func (m model) viewInterface() string {
 		{m.t.LabelPublicIP, orDefault(m.ifaceInfo.PublicIP, na)},
 	}
 
+	// Ancho de etiqueta uniforme, contando caracteres (runas) y no bytes,
+	// para que acentos como "á" en español no rompan la alineación.
+	labelWidth := 0
 	for _, f := range fields {
-		b.WriteString(fmt.Sprintf("%s%-14s%s\n", labelStyle.Render(""), f.label+":", f.value))
+		w := utf8.RuneCountInString(f.label) + 1 // +1 por los ":"
+		if w > labelWidth {
+			labelWidth = w
+		}
+	}
+
+	// Ancho total de línea (etiqueta + separador + valor), para saber
+	// cuánto rellenar antes de centrar el bloque completo.
+	lineWidth := 0
+	for _, f := range fields {
+		w := labelWidth + 1 + utf8.RuneCountInString(f.value)
+		if w > lineWidth {
+			lineWidth = w
+		}
+	}
+
+	for _, f := range fields {
+		label := f.label + ":"
+		labelPad := labelWidth - utf8.RuneCountInString(label)
+		line := label + strings.Repeat(" ", labelPad) + " " + f.value
+
+		linePad := lineWidth - utf8.RuneCountInString(line)
+		line += strings.Repeat(" ", linePad)
+
+		b.WriteString(labelStyle.Render(label+strings.Repeat(" ", labelPad)) + " " + f.value + strings.Repeat(" ", linePad) + "\n")
 	}
 
 	b.WriteString("\n" + buildHelpBar(m.t.InterfaceHelp, dimStyle, keyStyle) + "\n")
